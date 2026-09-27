@@ -237,7 +237,7 @@ async function toggleJoinRequest() {
 
                     <section v-show="activeSection === 'chat'" class="group-section-panel" aria-labelledby="group-chat-section-heading">
                         <h2 id="group-chat-section-heading" class="visually-hidden">Group chat</h2>
-                        <GroupChat :group-id="groupId" />
+                        <GroupChat :group-id="groupId" :active="activeSection === 'chat'" />
                     </section>
 
                     <section v-show="activeSection === 'posts'" class="group-section-panel group-feed orbit-surface" aria-labelledby="group-posts-heading">

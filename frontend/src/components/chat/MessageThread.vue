@@ -58,6 +58,17 @@ watch(() => props.loadingOlder, (loading, wasLoading) => {
   }
 }, { flush: 'post' })
 
+async function scrollToBottom() {
+  await nextTick()
+  const container = thread.value
+  if (!container || container.clientHeight === 0) return false
+
+  container.scrollTop = container.scrollHeight
+  return true
+}
+
+defineExpose({ scrollToBottom })
+
 function handleScroll() {
   if (!thread.value) return
 

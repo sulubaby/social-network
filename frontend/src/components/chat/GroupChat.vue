@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, onUnmounted, ref } from 'vue'
+import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { getGroupMessages } from '@/api/chats.js'
 import IconGlyph from '@/components/layout/IconGlyph.vue'
 import { appendUniqueMessage, normalizeChatMessage, normalizeChatMessages } from '@/helpers/chatMessages.js'
@@ -7,7 +7,10 @@ import { sendChatMessage, subscribeRealtime } from '@/services/realtime.js'
 import MessageComposer from './MessageComposer.vue'
 import MessageThread from './MessageThread.vue'
 
-const props = defineProps({ groupId: { type: [String, Number], required: true } })
+const props = defineProps({
+  groupId: { type: [String, Number], required: true },
+  active: { type: Boolean, default: false },
+})
 const messages = ref([])
 const loading = ref(true)
 const sending = ref(false)
@@ -16,11 +19,26 @@ const hasOlderMessages = ref(false)
 const messageOffset = ref(0)
 const error = ref('')
 const chatId = ref(null)
+const messageThread = ref(null)
 const MESSAGE_PAGE_SIZE = 20
 let stopMessageListener
 let stopErrorListener
 let stopConnectionListener
+let historyLoaded = false
+let initialScrollDone = false
 const pendingRealtimeMessages = []
+
+async function scrollInitialHistory() {
+  if (!props.active || !historyLoaded || initialScrollDone) return
+
+  // v-show must make the group-chat panel visible before it has scroll geometry.
+  await nextTick()
+  initialScrollDone = (await messageThread.value?.scrollToBottom()) === true
+}
+
+watch(() => props.active, active => {
+  if (active) void scrollInitialHistory()
+})
 
 function handleRealtimeMessage(event) {
   const message = normalizeChatMessage(event)
@@ -53,10 +71,12 @@ onMounted(async () => {
     pendingRealtimeMessages.splice(0).forEach(handleRealtimeMessage)
     messageOffset.value = messages.value.length
     hasOlderMessages.value = Boolean(result?.hasMore)
+    historyLoaded = true
   } catch (err) {
     error.value = err.message
   } finally {
     loading.value = false
+    await scrollInitialHistory()
   }
 })
 
@@ -112,6 +132,7 @@ function send(content, clear) {
     </header>
     <p v-if="error" class="group-chat__error" role="alert">{{ error }}</p>
     <MessageThread
+      ref="messageThread"
       :messages="messages"
       :loading="loading"
       :loading-older="loadingOlderMessages"
