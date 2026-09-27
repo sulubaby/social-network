@@ -1,6 +1,7 @@
 import { checkSessionResponse } from '@/helpers/auth/auth'
 import { router } from '@/router/router'
 
+// create a post. formData has content, privacy, location, selected followers and the image
 export async function createPost(formData) {
     const response = await fetch('/api/posts', {
         method: 'POST',
@@ -22,6 +23,7 @@ export async function createPost(formData) {
     return result
 }
 
+// get one page of the home feed
 export async function getPosts({ limit = 20, offset = 0 } = {}) {
     const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
     const response = await fetch(`/api/posts?${params}`, {
@@ -43,6 +45,7 @@ export async function getPosts({ limit = 20, offset = 0 } = {}) {
     return result
 }
 
+// like = PUT, unlike = DELETE on the same url
 export async function setPostLike(postId, liked) {
     const response = await fetch(`/api/posts/${postId}/like`, {
         method: liked ? 'PUT' : 'DELETE',

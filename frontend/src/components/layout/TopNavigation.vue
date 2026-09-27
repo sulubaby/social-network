@@ -7,38 +7,48 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { router } from '@/router/router.js'
 import IconGlyph from './IconGlyph.vue'
 import { getSearchResults } from '@/api/search.js'
+// search box state and the little dropdown under it
 const logoutError = ref('')
 const searchText = ref('')
 const suggestions = ref({ users: [], groups: [], posts: [] })
 const searchOpen = ref(false)
 const searchLoading = ref(false)
+// suggestionRequestID helps us ignore old search answers that come back late
 let suggestionTimer
 let suggestionRequestID = 0
 
+// my avatar for the top right corner
 const props = defineProps(["avatar"]);
 
+// true if the search found anything at all
 const hasSuggestions = computed(() =>
   suggestions.value.users.length > 0 ||
   suggestions.value.groups.length > 0 ||
   suggestions.value.posts.length > 0,
 )
 
+// go to the full search page with what i typed
 function navigateToSearch(value) {
   const search = value.trim()
   router.push(search ? { path: '/search', query: { q: search } } : '/search')
 }
 
+// builds the /uploads/ url for avatars
 function avatarUrl(path) {
   if (!path) return ''
   return path.startsWith('/') ? path : `/uploads/${path}`
 }
 
+// empty and close the dropdown
 function clearSuggestions() {
   suggestions.value = { users: [], groups: [], posts: [] }
   searchOpen.value = false
   searchLoading.value = false
 }
 
+// runs every time i type. it waits 350ms after i stop typing
+// before asking the server (debounce), so we dont send a request for every letter.
+// if an older answer comes back after a newer one we ignore it
 function scheduleSuggestions(value) {
   clearTimeout(suggestionTimer)
   const search = value.trim()
@@ -69,12 +79,14 @@ function scheduleSuggestions(value) {
   }, 350)
 }
 
+// pressing enter in the search box
 function submitSearch() {
   clearTimeout(suggestionTimer)
   clearSuggestions()
   navigateToSearch(searchText.value)
 }
 
+// clicking a result: user -> their profile, group -> group page, post -> search page
 function openSuggestion(type, item) {
   clearTimeout(suggestionTimer)
   clearSuggestions()
@@ -92,9 +104,11 @@ function openSuggestion(type, item) {
   router.push({ path: '/search', query: { q: searchText.value.trim(), type: 'posts' } })
 }
 
+// watch the search text and stop the timer when leaving the page
 watch(searchText, scheduleSuggestions)
 onBeforeUnmount(() => clearTimeout(suggestionTimer))
 
+// log out button
 async function signOut() {
   try {
     await logout()
@@ -104,6 +118,7 @@ async function signOut() {
     logoutError.value = 'Could not log out. Please try again.'
   }
 }
+// the red numbers on the chat and notification icons
 const { unreadCount: notificationUnreadCount } = useNotifications()
 const { chatCount } = useChatCount()
 </script>
@@ -115,6 +130,7 @@ const { chatCount } = useChatCount()
       <span>orbit</span>
     </a>
 
+    <!-- search box with the live suggestions dropdown -->
     <div class="search-shell">
       <form class="search" role="search" @submit.prevent="submitSearch">
         <IconGlyph name="search" :size="16" />
@@ -174,6 +190,7 @@ const { chatCount } = useChatCount()
       </div>
     </div>
 
+    <!-- messages, notifications, my avatar and log out -->
     <nav class="top-actions" aria-label="Account shortcuts">
       <a class="icon-link orbit-touch-target" href="/chats" aria-label="Messages"
         :title="`${chatCount} unread message${chatCount === 1 ? '' : 's'}`">

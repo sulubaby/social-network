@@ -9,13 +9,17 @@ import (
 	"strings"
 )
 
+// the location text cant be longer than this
 const maxLocationLength = 200
 
+// errors for the "selected followers" privacy option
 var (
 	ErrSelectedFollowersRequired = errors.New("select at least one follower")
 	ErrInvalidPostViewer         = errors.New("selected viewers must follow the post author")
 )
 
+// CreatePost saves a new post. for "selected" posts it also saves who can see it.
+// its all in one transaction, so if one step fails nothing gets saved
 func CreatePost(db *sql.DB, userID int, request models.CreatePostRequest) (models.Post, error) {
 	tx, err := db.Begin()
 	if err != nil {
@@ -23,6 +27,7 @@ func CreatePost(db *sql.DB, userID int, request models.CreatePostRequest) (model
 	}
 	defer tx.Rollback()
 
+	// if the privacy is selected, every picked person must really follow me
 	selectedIDs := uniqueIDs(request.SelectedFollowerIDs)
 	if request.Privacy == models.PostPrivacySelected {
 		if len(selectedIDs) == 0 {
@@ -45,6 +50,7 @@ func CreatePost(db *sql.DB, userID int, request models.CreatePostRequest) (model
 		}
 	}
 
+	// save the post itself (group_id is NULL because this is not a group post)
 	result, err := tx.Exec(`
 	INSERT INTO posts (type, title, content, image_path, user_id, group_id, privacy, location)
 	VALUES ('post', '', ?, ?, ?, NULL, ?, ?)
@@ -58,6 +64,7 @@ func CreatePost(db *sql.DB, userID int, request models.CreatePostRequest) (model
 		return models.Post{}, err
 	}
 
+	// save the list of people allowed to see this post
 	if request.Privacy == models.PostPrivacySelected {
 		for _, viewerID := range selectedIDs {
 			_, err = tx.Exec(`
@@ -77,6 +84,7 @@ func CreatePost(db *sql.DB, userID int, request models.CreatePostRequest) (model
 	return GetPostByID(db, postID)
 }
 
+// GetPostByID gets one post with the author name and avatar
 func GetPostByID(db *sql.DB, postID int64) (models.Post, error) {
 	var post models.Post
 
@@ -114,6 +122,10 @@ func GetPostByID(db *sql.DB, postID int64) (models.Post, error) {
 	return post, err
 }
 
+// ListFeedPosts builds the home feed for the logged in user.
+// a post shows up if: its mine, or its public, or its for followers and i follow
+// the author, or its selected and i am in the list.
+// liked tells the frontend if i already liked the post
 func ListFeedPosts(db *sql.DB, viewerID int, pagination ...int) ([]models.Post, error) {
 	query := `
 		SELECT
@@ -206,6 +218,7 @@ func ListFeedPosts(db *sql.DB, viewerID int, pagination ...int) ([]models.Post, 
 	return posts, nil
 }
 
+// uniqueIDs removes duplicates and bad ids (0 or less) from a list
 func uniqueIDs(ids []int) []int {
 	seen := make(map[int]bool)
 	unique := make([]int, 0, len(ids))
@@ -221,6 +234,7 @@ func uniqueIDs(ids []int) []int {
 	return unique
 }
 
+// IsPostPrivacy checks the privacy is public, followers or selected
 func IsPostPrivacy(value string) bool {
 	switch value {
 	case models.PostPrivacyPublic, models.PostPrivacyFollowers, models.PostPrivacySelected:
@@ -230,6 +244,8 @@ func IsPostPrivacy(value string) bool {
 	}
 }
 
+// ValidateSelectedIDs: selected privacy needs at least one person,
+// and the other privacy types shouldnt send a list at all
 func ValidateSelectedIDs(privacy string, ids []int) error {
 	if privacy == models.PostPrivacySelected && len(uniqueIDs(ids)) == 0 {
 		return ErrSelectedFollowersRequired
@@ -240,6 +256,7 @@ func ValidateSelectedIDs(privacy string, ids []int) error {
 	return nil
 }
 
+// nullableText saves NULL in the database instead of an empty string
 func nullableText(value string) any {
 	if value == "" {
 		return nil
@@ -247,6 +264,8 @@ func nullableText(value string) any {
 	return value
 }
 
+// IsValidLocation checks the location looks like "name:lat:lon".
+// empty is fine because location is optional
 func IsValidLocation(value string) bool {
 	if value == "" {
 		return true

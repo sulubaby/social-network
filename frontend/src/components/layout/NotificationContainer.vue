@@ -1,4 +1,5 @@
 <script setup>
+// the small popup messages (toasts) that show in the corner, like errors
 import { notifications, removeNotification } from '@/data/notifications'
 import IconGlyph from './IconGlyph.vue'
 </script>

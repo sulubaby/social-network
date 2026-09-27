@@ -2,6 +2,8 @@ package models
 
 import "time"
 
+// Notification is what we send to the frontend.
+// the *Status fields are nil when they dont apply to that notification type
 type Notification struct {
 	ID               int64     `json:"id"`
 	UserID           int       `json:"userId"`
@@ -18,6 +20,7 @@ type Notification struct {
 	EventResponse    *string   `json:"eventResponse"`
 }
 
+// the data we need when creating a new notification from the backend
 type CreateNotificationRequest struct {
 	ActorID   *int
 	Category  string

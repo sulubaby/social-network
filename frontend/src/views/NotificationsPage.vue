@@ -10,6 +10,7 @@ import {
 } from '@/api/notifications.js'
 import { subscribeRealtime } from '@/services/realtime.js'
 
+// the filter tabs on top of the page
 const filters = [
   { id: 'all', label: 'All' },
   { id: 'requests', label: 'Requests' },
@@ -18,6 +19,7 @@ const filters = [
   { id: 'messages', label: 'Messages' },
 ]
 
+// page state: the list, loading flags, errors and the unread number
 const notificationItems = ref([])
 const isLoading = ref(true)
 const isLoadingMore = ref(false)
@@ -32,6 +34,7 @@ let stopConnectionListener
 
 const activeFilter = ref('all')
 
+// only show the notifications of the tab that is picked
 const visibleNotifications = computed(() => {
   if (activeFilter.value === 'all') return notificationItems.value
   return notificationItems.value.filter((item) => item.type === activeFilter.value)
@@ -39,6 +42,7 @@ const visibleNotifications = computed(() => {
 
 const unreadCount = computed(() => unreadTotal.value)
 
+// turns the date from the server into something like "Sep 27, 2026, 3:20 PM"
 function formatNotificationTime(value) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return 'Recently'
@@ -46,6 +50,7 @@ function formatNotificationTime(value) {
   return date.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
 }
 
+// the text we show after the user already answered (accepted, declined...)
 function actionLabel(action) {
   return {
     accept: 'Accepted',
@@ -56,6 +61,8 @@ function actionLabel(action) {
   }[action] || action
 }
 
+// takes a notification from the server and adds what the page needs to show it:
+// icon, color, time text, and which buttons to show (action)
 function notificationForDisplay(notification) {
   const categoryStyles = {
     requests: { icon: 'profile', color: '#7c5cff' },
@@ -69,10 +76,12 @@ function notificationForDisplay(notification) {
 
   let action = ''
 
+  // follow request: 0 = still waiting so show buttons, 1 = already accepted
   if (notification.category === 'requests' && notification.type === 'follow_request') {
     action = notification.followStatus === 0 ? 'follow' : notification.followStatus === 1 ? 'accept' : ''
   }
 
+  // someone asked to join my group
   if (notification.category === 'groups' && notification.type === 'join_request') {
     if (notification.requestStatus === 'accepted') {
       action = 'accept'
@@ -83,6 +92,7 @@ function notificationForDisplay(notification) {
     }
   }
 
+  // someone invited me to a group
   if (notification.category === 'groups' && notification.type === 'invitation') {
     if (notification.invitationStatus === 'accepted') {
       action = 'join'
@@ -93,6 +103,7 @@ function notificationForDisplay(notification) {
     }
   }
 
+  // new event: going / not going
   if (notification.category === 'events' && notification.type === 'event_created') {
     action = notification.eventResponse === 'going' ? 'going' : notification.eventResponse === 'declined' ? 'decline' : 'rsvp'
   }
@@ -110,6 +121,8 @@ function notificationForDisplay(notification) {
   }
 }
 
+// a new notification came from the websocket, put it on top of the list
+// (or update it if we already have it)
 function receiveRealtimeNotification(event) {
   const notification = event?.notification
   if (!notification?.id) return
@@ -123,6 +136,8 @@ function receiveRealtimeNotification(event) {
   if (item.unread) unreadTotal.value += 1
 }
 
+// loads the notifications from the server.
+// append = true is for infinite scroll (add the next page at the bottom)
 async function loadNotifications({ append = false } = {}) {
   if (append) {
     if (isLoadingMore.value || !hasMoreNotifications.value) return
@@ -149,6 +164,7 @@ async function loadNotifications({ append = false } = {}) {
   }
 }
 
+// clicking a notification marks it as read
 async function markAsRead(item) {
   if (!item.unread) return
 
@@ -161,6 +177,7 @@ async function markAsRead(item) {
   }
 }
 
+// the "mark all as read" button
 async function markAllAsRead() {
   try {
     await markAllNotificationsRead()
@@ -173,6 +190,8 @@ async function markAllAsRead() {
   }
 }
 
+// runs when a button in a notification is clicked (accept, decline, join...)
+// busy stops double clicks, and if it fails we put the old state back
 async function chooseAction(item, action) {
   if (item.busy) return
   item.busy = true
@@ -191,6 +210,7 @@ async function chooseAction(item, action) {
   }
 }
 
+// infinite scroll: when the empty div at the bottom comes on screen we load the next page
 function observeNotificationEnd() {
   if (!notificationSentinel.value || typeof IntersectionObserver === 'undefined') return
 
@@ -206,6 +226,7 @@ function observeNotificationEnd() {
   notificationObserver.observe(notificationSentinel.value)
 }
 
+// when the page opens: listen for live notifications, start the scroll watcher, load the first page
 onMounted(async () => {
   stopNotificationListener = subscribeRealtime('notification', receiveRealtimeNotification)
   stopConnectionListener = subscribeRealtime('connection', event => {
@@ -215,6 +236,7 @@ onMounted(async () => {
   await loadNotifications()
 })
 
+// clean up the listeners when we leave the page
 onBeforeUnmount(() => {
   notificationObserver?.disconnect()
   stopNotificationListener?.()
@@ -227,6 +249,7 @@ onBeforeUnmount(() => {
     <div class="notifications-layout">
       <section class="notifications-page orbit-surface" aria-labelledby="notifications-title">
       <div class="notifications-sticky-controls">
+        <!-- title, unread count and the mark all as read button -->
         <header class="notifications-page__header">
           <div>
             <p class="orbit-meta">Stay in the loop</p>
@@ -245,6 +268,7 @@ onBeforeUnmount(() => {
           </button>
         </header>
 
+        <!-- filter tabs -->
         <nav class="notification-filters" aria-label="Notification filters">
           <button v-for="filter in filters" :key="filter.id" type="button"
             :class="{ 'notification-filter--active': activeFilter === filter.id }" @click="activeFilter = filter.id">
@@ -253,6 +277,7 @@ onBeforeUnmount(() => {
         </nav>
       </div>
 
+      <!-- loading / error / list / empty states -->
       <p v-if="isLoading" class="notifications-state">
         Loading notifications...
       </p>
@@ -266,6 +291,7 @@ onBeforeUnmount(() => {
       </div>
 
       <div v-else-if="visibleNotifications.length" class="notification-list">
+        <!-- one notification -->
         <article v-for="item in visibleNotifications" :key="item.id" class="notification-item"
           :class="{ 'notification-item--unread': item.unread }" @click="markAsRead(item)">
           <div class="notification-item__icon" :style="{ background: item.color }" aria-hidden="true">
@@ -279,6 +305,8 @@ onBeforeUnmount(() => {
           </div>
 
           <!-- Follow request -->
+          <!-- the buttons change depending on the notification type.
+               if it was already answered we just show the result text -->
           <div v-if="item.action === 'follow'" class="notification-item__actions">
             <button type="button" class="action-button action-button--primary"
               @click.stop="chooseAction(item, 'accept')">
@@ -338,11 +366,13 @@ onBeforeUnmount(() => {
         <p>Nothing here yet.</p>
       </div>
 
+      <!-- empty div for infinite scroll -->
       <div ref="notificationSentinel" class="notification-load-sentinel" aria-hidden="true"></div>
       <p v-if="isLoadingMore" class="notification-load-state" role="status">Loading more updates...</p>
       <p v-else-if="!hasMoreNotifications && notificationItems.length" class="notification-load-state">You’re all caught up.</p>
       </section>
 
+      <!-- side box that explains the notification types -->
       <aside class="notification-legend orbit-surface" aria-labelledby="notification-legend-title">
         <p class="orbit-meta">How Orbit speaks</p>
         <h2 id="notification-legend-title">Two kinds of signals</h2>

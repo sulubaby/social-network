@@ -9,6 +9,7 @@ import {
 import CommentMenu from '@/components/comments/CommentMenu.vue'
 import IconGlyph from '@/components/layout/IconGlyph.vue'
 
+// one post inside a group page. we need the group id for the api urls
 const props = defineProps({
   groupId: {
     type: [String, Number],
@@ -20,8 +21,10 @@ const props = defineProps({
   },
 })
 
+// tells the group page to remove the post after i delete it
 const emit = defineEmits(['post-deleted'])
 
+// comments state. they only load when you open them
 const comments = ref([])
 const commentsVisible = ref(false)
 const commentsLoaded = ref(false)
@@ -39,22 +42,29 @@ const deletingCommentId = ref(null)
 const postDeleteError = ref('')
 const localCommentCount = ref(props.post.commentCount || 0)
 const COMMENTS_PAGE_SIZE = 20
+// ids of comments that came from the server pages,
+// so when i delete one we can fix the offset for the next page
 const loadedCommentIDs = new Set()
 let commentsObserver
 
+// full name, or username if there is no name
 const authorName = computed(() => `${props.post.firstName || ''} ${props.post.lastName || ''}`.trim() || props.post.username || 'Group member')
 const canComment = computed(() => commentContent.value.trim() !== '')
 
+// builds the /uploads/ url for images
 function assetUrl(path) {
   if (!path) return ''
   return path.startsWith('/') ? path : `/uploads/${path}`
 }
 
+// date in the local format of the browser
 function formatDate(value) {
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? '' : date.toLocaleString()
 }
 
+// loads the comments of this group post (20 at a time).
+// append = true adds the next page when you scroll
 async function loadComments({ append = false } = {}) {
   if (append) {
     if (commentsLoadingMore.value || !commentsHasMore.value) return
@@ -93,6 +103,7 @@ async function loadComments({ append = false } = {}) {
   }
 }
 
+// infinite scroll inside the comments list
 function observeCommentsEnd() {
   commentsObserver?.disconnect()
   if (!commentsVisible.value || !commentsList.value || !commentsSentinel.value || typeof IntersectionObserver === 'undefined') return
@@ -108,12 +119,14 @@ function observeCommentsEnd() {
   commentsObserver.observe(commentsSentinel.value)
 }
 
+// try again button
 async function retryComments() {
   await loadComments({ append: commentsLoaded.value && comments.value.length > 0 })
   await nextTick()
   observeCommentsEnd()
 }
 
+// open / close the comments. first open loads them
 async function toggleComments() {
   commentsVisible.value = !commentsVisible.value
   if (!commentsVisible.value) {
@@ -126,10 +139,12 @@ async function toggleComments() {
   observeCommentsEnd()
 }
 
+// clear the comment box after sending
 function clearCommentForm() {
   commentContent.value = ''
 }
 
+// send a text comment and add it at the bottom
 async function submitComment() {
   if (!canComment.value || isSubmittingComment.value) return
 
@@ -150,6 +165,7 @@ async function submitComment() {
   }
 }
 
+// delete my post (asks first with a confirm box)
 async function removePost() {
   if (isDeletingPost.value || !window.confirm('Delete this post?')) return
 
@@ -165,6 +181,7 @@ async function removePost() {
   }
 }
 
+// delete my comment and fix the count and the offset
 async function removeComment(comment) {
   if (deletingCommentId.value !== null) return
 
@@ -184,12 +201,14 @@ async function removeComment(comment) {
   }
 }
 
+// stop the scroll watcher when the card is removed
 onBeforeUnmount(() => commentsObserver?.disconnect())
 
 </script>
 
 <template>
   <article class="group-post-card">
+    <!-- author (links to their profile) and the delete button if its my post -->
     <header class="group-post-card__header">
       <RouterLink
         v-if="post.userId"
@@ -224,6 +243,7 @@ onBeforeUnmount(() => commentsObserver?.disconnect())
       </button>
     </header>
 
+    <!-- post text and picture -->
     <p v-if="post.content" class="group-post-card__content">{{ post.content }}</p>
     <img v-if="post.imagePath" class="group-post-card__image" :src="assetUrl(post.imagePath)" alt="Image attached to this group post" />
     <p v-if="postDeleteError" class="comments-error" role="alert">{{ postDeleteError }}</p>
@@ -233,6 +253,7 @@ onBeforeUnmount(() => commentsObserver?.disconnect())
       {{ commentsVisible ? 'Hide comments' : `Comments (${localCommentCount})` }}
     </button>
 
+    <!-- comments box: loading / error / empty / list, then the form to write one -->
     <section v-if="commentsVisible" class="group-comments">
       <p v-if="commentsLoading" class="comments-state">Loading comments...</p>
       <div v-else-if="commentsError && !comments.length" class="comments-state comments-state--error" role="alert">
@@ -256,6 +277,7 @@ onBeforeUnmount(() => commentsObserver?.disconnect())
                 <strong>{{ `${comment.firstName || ''} ${comment.lastName || ''}`.trim() || comment.username }}</strong>
                 <small>@{{ comment.username }} <span aria-hidden="true">&middot;</span> {{ formatDate(comment.createdAt) }}</small>
               </div>
+              <!-- delete menu only on my own comments -->
               <CommentMenu
                 v-if="comment.isOwner"
                 :disabled="deletingCommentId !== null"
@@ -273,6 +295,7 @@ onBeforeUnmount(() => commentsObserver?.disconnect())
         <button type="button" @click="retryComments">Try again</button>
       </div>
 
+      <!-- write a comment (text only in groups) -->
       <form class="comment-form" @submit.prevent="submitComment">
         <label class="visually-hidden" :for="`group-comment-${post.id}`">Write a comment</label>
         <textarea :id="`group-comment-${post.id}`" v-model="commentContent" maxlength="200" rows="2" placeholder="Write a comment..."></textarea>

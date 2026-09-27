@@ -2,6 +2,8 @@
 import { computed } from 'vue'
 import { useNotifications } from '@/helpers/useNotifications.js'
 import IconGlyph from '@/components/layout/IconGlyph.vue'
+// the right side box on the home feed. it shows my 4 newest notifications
+// using the same shared list as the top bar
 const { items, unreadCount, error } = useNotifications()
 const recent = computed(() => items.value.slice(0, 4))
 </script>

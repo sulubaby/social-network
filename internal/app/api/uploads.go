@@ -11,6 +11,8 @@ import (
 
 // A private post's image must have the same audience as the post itself.
 func (app App) ServeUpload(w http.ResponseWriter, r *http.Request) {
+	// the url looks like /uploads/posts/abc.png
+	// we only allow "folder/file" with no extra slashes, so nobody can do ../ tricks
 	userID, _ := r.Context().Value("userID").(int)
 	name := strings.TrimPrefix(r.URL.Path, "/uploads/")
 	parts := strings.Split(name, "/")
@@ -18,6 +20,8 @@ func (app App) ServeUpload(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	// avatars are for everyone. post and comment images are only for
+	// people who can see that post. if not allowed we just say 404
 	if parts[0] != "avatars" {
 		switch parts[0] {
 		case "posts":
@@ -37,11 +41,14 @@ func (app App) ServeUpload(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// dont cache private images and dont let the browser guess the file type
 	w.Header().Set("Cache-Control", "private, no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	http.ServeFile(w, r, filepath.Join("uploads", parts[0], parts[1]))
 }
 
+// canViewPostUpload finds which post has this image and checks i can see it.
+// if its not a normal post it can be a group post, then i must be a member
 func (app App) canViewPostUpload(userID int, imagePath string) (bool, error) {
 	var postID int64
 	err := app.DB.QueryRow(`SELECT id FROM posts WHERE image_path = ?`, imagePath).Scan(&postID)
@@ -65,6 +72,7 @@ func (app App) canViewPostUpload(userID int, imagePath string) (bool, error) {
 	return allowed, err
 }
 
+// canViewCommentUpload: a comment image follows the same rules as the post it is on
 func (app App) canViewCommentUpload(userID int, imagePath string) (bool, error) {
 	var postID int64
 	err := app.DB.QueryRow(`SELECT post_id FROM comments WHERE image_path = ?`, imagePath).Scan(&postID)

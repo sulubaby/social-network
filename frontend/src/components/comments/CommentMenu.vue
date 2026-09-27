@@ -1,6 +1,7 @@
 <script setup>
 import { nextTick, onBeforeUnmount, ref } from 'vue'
 
+// the ... menu on my own comments. it only has a delete option
 defineProps({
   disabled: {
     type: Boolean,
@@ -15,9 +16,12 @@ const trigger = ref(null)
 const panel = ref(null)
 const position = ref({ top: 0, left: 0 })
 
+// spacing so the menu doesnt touch the screen edge
 const VIEWPORT_MARGIN = 8
 const TRIGGER_GAP = 4
 
+// works out where to show the menu. under the button normally,
+// but above it if there is no space at the bottom of the screen
 function placePanel() {
   const triggerRect = trigger.value?.getBoundingClientRect()
   if (!triggerRect || !panel.value) return
@@ -39,6 +43,7 @@ function placePanel() {
   position.value = { top, left }
 }
 
+// clicking anywhere outside the menu closes it
 function handlePointerDown(event) {
   if (
     panel.value?.contains(event.target) ||
@@ -50,6 +55,7 @@ function handlePointerDown(event) {
   close()
 }
 
+// escape closes the menu
 function handleKeydown(event) {
   if (event.key !== 'Escape') return
 
@@ -57,6 +63,7 @@ function handleKeydown(event) {
   trigger.value?.focus()
 }
 
+// we only listen to clicks/scroll/resize while the menu is open
 function addListeners() {
   document.addEventListener('pointerdown', handlePointerDown)
   document.addEventListener('keydown', handleKeydown)
@@ -71,6 +78,7 @@ function removeListeners() {
   window.removeEventListener('scroll', close, true)
 }
 
+// open: show it, wait for it to render so we know its size, then place it
 async function open() {
   isOpen.value = true
   await nextTick()
@@ -93,6 +101,7 @@ function toggle() {
   }
 }
 
+// the delete option, the parent does the real delete
 function remove() {
   close()
   emit('remove')
@@ -120,6 +129,7 @@ onBeforeUnmount(removeListeners)
       </svg>
     </button>
 
+    <!-- the menu is put on the body so it doesnt get cut by the comments box scroll -->
     <Teleport to="body">
       <div
         v-if="isOpen"

@@ -2,6 +2,7 @@ package models
 
 import "time"
 
+// GroupPost is a post inside a group. IsOwner means i wrote it
 type GroupPost struct {
 	ID           int64     `json:"id"`
 	GroupID      int64     `json:"groupId"`
@@ -17,6 +18,8 @@ type GroupPost struct {
 	IsOwner      bool      `json:"isOwner"`
 }
 
+// GroupPostComment is a comment on a group post.
+// ImagePath has json:"-" so the real file path never goes to the browser
 type GroupPostComment struct {
 	ID         int64     `json:"id"`
 	PostID     int64     `json:"postId"`

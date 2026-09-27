@@ -15,6 +15,7 @@ import { addNotification } from '@/data/notifications'
 
 import { getUserData } from '@/api/users/personalProfile'
 
+// feed state: the posts, loading flags, error text and the logged in user
 const posts = ref([])
 
 const isLoading = ref(true)
@@ -33,6 +34,7 @@ let feedObserver
 
 const user = ref({})
 
+// colors for the avatar circle when a user has no picture
 const avatarColors = [
   '#3ee6b0',
   '#ff6b8a',
@@ -41,6 +43,7 @@ const avatarColors = [
   '#4cc3ff'
 ]
 
+// get my own user data (we need my avatar for the post box)
 async function getData() {
   try {
     const result = await getUserData()
@@ -56,6 +59,7 @@ async function getData() {
   }
 }
 
+// makes the post date easy to read. sqlite gives "2026-09-27 15:20:00" so we swap the space for a T first
 function formatPostTime(value) {
   if (!value) return 'Just now'
 
@@ -71,6 +75,7 @@ function formatPostTime(value) {
   })
 }
 
+// turns public/followers/selected into the text we show on the card
 function privacyLabel(value) {
   const labels = {
     public: 'Public',
@@ -81,6 +86,7 @@ function privacyLabel(value) {
   return labels[value] || value
 }
 
+// location is saved like "Manama:26.2:50.5", we only show the name part
 function formatLocation(value) {
   if (!value) return ''
 
@@ -89,6 +95,7 @@ function formatLocation(value) {
   return parts[0]?.trim() || ''
 }
 
+// changes a post from the server into the shape PostCard wants
 function toCardPost(post, index = 0) {
   return {
     id: post.id,
@@ -111,6 +118,7 @@ function toCardPost(post, index = 0) {
   }
 }
 
+// loads the feed. append = true means get the next page for infinite scroll
 async function loadPosts({ append = false } = {}) {
   if (append) {
     if (
@@ -158,6 +166,7 @@ async function loadPosts({ append = false } = {}) {
   }
 }
 
+// when i make a new post it goes on top of the feed right away (no reload)
 function addPost(post) {
   if (!post) return
 
@@ -166,6 +175,7 @@ function addPost(post) {
   )
 }
 
+// infinite scroll: load more when the bottom of the feed is close to the screen
 function observeFeedEnd() {
   if (
     !feedSentinel.value ||
@@ -195,6 +205,7 @@ function observeFeedEnd() {
   feedObserver.observe(feedSentinel.value)
 }
 
+// when the page opens: load posts, my data, then start watching the scroll
 onMounted(async () => {
   await loadPosts()
   await getData()
@@ -214,6 +225,7 @@ onBeforeUnmount(() => {
           Home feed
         </h1>
 
+        <!-- the box to write a new post -->
         <PostComposer
           :avatar="
             user?.UserInfo?.Avatar
@@ -223,6 +235,7 @@ onBeforeUnmount(() => {
           @post-created="addPost"
         />
 
+        <!-- loading / error / no posts / the list of posts -->
         <p
           v-if="isLoading"
           class="feed-state orbit-surface"
@@ -261,6 +274,7 @@ onBeforeUnmount(() => {
           />
         </template>
 
+        <!-- empty div at the bottom used for infinite scroll -->
         <div
           ref="feedSentinel"
           class="feed-load-sentinel"
@@ -283,6 +297,7 @@ onBeforeUnmount(() => {
         </p>
       </div>
 
+      <!-- right side panel -->
       <FeedSidebar />
     </div>
   </AuthenticatedLayout>

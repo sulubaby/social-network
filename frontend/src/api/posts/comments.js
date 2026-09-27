@@ -1,6 +1,7 @@
 import { checkSessionResponse } from '@/helpers/auth/auth'
 import { router } from '@/router/router'
 
+// helper for the comment requests: sends the cookie, handles logout and errors
 async function requestComments(url, options = {}) {
   const response = await fetch(url, {
     credentials: 'include',
@@ -20,6 +21,7 @@ async function requestComments(url, options = {}) {
   return result
 }
 
+// get one page of comments of a post
 export async function getComments(postId, { limit = 20, offset = 0 } = {}) {
   const params = new URLSearchParams({
     limit: String(limit),
@@ -29,6 +31,8 @@ export async function getComments(postId, { limit = 20, offset = 0 } = {}) {
   return requestComments(`/api/posts/${postId}/comments?${params}`)
 }
 
+// add a comment. if there is an image we have to send FormData,
+// if its just text we send normal json
 export async function createComment(postId, comment) {
   if (comment.image) {
     const formData = new FormData()
@@ -50,6 +54,7 @@ export async function createComment(postId, comment) {
   })
 }
 
+// delete my comment
 export async function deleteComment(postId, commentId) {
   return requestComments(`/api/posts/${postId}/comments/${commentId}`, {
     method: 'DELETE',

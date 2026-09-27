@@ -1,3 +1,4 @@
+// database functions for comments on normal (non group) posts
 package comments
 
 import (
@@ -7,14 +8,18 @@ import (
 	"strings"
 )
 
+// returned when the user is not allowed to see the post
 var ErrPostNotVisible = errors.New("post is not available")
 
+// CreateComment saves a new comment and returns it with the author info.
+// a comment can be text, an image, or both. text is max 200 characters
 func CreateComment(db *sql.DB, userID int, postID int64, content, imagePath string) (models.Comment, error) {
 	content = strings.TrimSpace(content)
 	if (content == "" && imagePath == "") || len([]rune(content)) > 200 {
 		return models.Comment{}, errors.New("comment must contain 1 to 200 characters of text, an image, or both")
 	}
 
+	// you cant comment on a post you are not allowed to see
 	canView, err := CanViewPost(db, userID, postID)
 	if err != nil {
 		return models.Comment{}, err
@@ -39,6 +44,7 @@ func CreateComment(db *sql.DB, userID int, postID int64, content, imagePath stri
 	return GetCommentByID(db, commentID)
 }
 
+// GetCommentByID gets one comment with the author name and avatar
 func GetCommentByID(db *sql.DB, commentID int64) (models.Comment, error) {
 	var comment models.Comment
 
@@ -105,6 +111,9 @@ func ListComments(db *sql.DB, userID int, postID int64, pagination ...int) ([]mo
 	return result, nil
 }
 
+// CanViewPost checks if a user can see a post using the privacy rules:
+// my own post, public post, followers post (i must follow them),
+// or selected post (i must be in post_viewers)
 func CanViewPost(db *sql.DB, viewerID int, postID int64) (bool, error) {
 	var canView bool
 	err := db.QueryRow(`
@@ -142,6 +151,7 @@ func CanViewPost(db *sql.DB, viewerID int, postID int64) (bool, error) {
 	return canView, err
 }
 
+// base SELECT for comments. if the user has no username we show first + last name
 const commentQuery = `
 	SELECT
 		comments.id,

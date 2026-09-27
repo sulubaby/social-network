@@ -1,3 +1,5 @@
+// this file has all the database functions for notifications
+// (making them, listing them, counting unread ones, marking them read)
 package notifications
 
 import (
@@ -7,8 +9,11 @@ import (
 	"strings"
 )
 
+// we return this when someone asks for a category that doesnt exist
 var ErrInvalidCategory = errors.New("notification category must be requests, groups, events, or messages")
 
+// Create saves a new notification for a user and gives back the saved row.
+// it checks the category and makes sure type and message are not empty
 func Create(db *sql.DB, userID int, request models.CreateNotificationRequest) (models.Notification, error) {
 	if userID <= 0 || !IsCategory(request.Category) {
 		return models.Notification{}, ErrInvalidCategory
@@ -21,6 +26,7 @@ func Create(db *sql.DB, userID int, request models.CreateNotificationRequest) (m
 		return models.Notification{}, errors.New("notification type and message are required")
 	}
 
+	// save it in the table
 	result, err := db.Exec(`
 		INSERT INTO notifications (user_id, actor_id, category, type, message, related_id)
 		VALUES (?, ?, ?, ?, ?, ?)
@@ -37,10 +43,14 @@ func Create(db *sql.DB, userID int, request models.CreateNotificationRequest) (m
 	return GetByID(db, userID, id)
 }
 
+// List gets the notifications of one user, newest first.
+// category can be empty or "all" to get everything.
+// pagination is optional: [limit, offset]
 func List(db *sql.DB, userID int, category string, pagination ...int) ([]models.Notification, error) {
 	query := notificationSelect + ` WHERE n.user_id = ?`
 	args := []any{userID}
 
+	// only filter by category if one was picked
 	if category != "" && category != "all" {
 		if !IsCategory(category) {
 			return nil, ErrInvalidCategory
@@ -49,6 +59,7 @@ func List(db *sql.DB, userID int, category string, pagination ...int) ([]models.
 		args = append(args, category)
 	}
 
+	// newest first, and if no page was given we just cap it at 100
 	query += ` ORDER BY n.created_at DESC, n.id DESC`
 	if len(pagination) >= 2 {
 		query += ` LIMIT ? OFFSET ?`
@@ -74,6 +85,8 @@ func List(db *sql.DB, userID int, category string, pagination ...int) ([]models.
 	return result, rows.Err()
 }
 
+// UnreadCount counts how many notifications the user didnt read yet.
+// used for the red number badge in the nav
 func UnreadCount(db *sql.DB, userID int, categories ...string) (int, error) {
 	category := ""
 	if len(categories) > 0 {
@@ -99,6 +112,8 @@ func UnreadCount(db *sql.DB, userID int, categories ...string) (int, error) {
 	return count, err
 }
 
+// MarkRead marks one notification as read.
+// we also check user_id so nobody can mark someone elses notification
 func MarkRead(db *sql.DB, userID int, notificationID int64) error {
 	_, err := db.Exec(`
 		UPDATE notifications
@@ -108,6 +123,7 @@ func MarkRead(db *sql.DB, userID int, notificationID int64) error {
 	return err
 }
 
+// MarkAllRead is for the "mark all as read" button
 func MarkAllRead(db *sql.DB, userID int) error {
 	_, err := db.Exec(`
 		UPDATE notifications
@@ -131,6 +147,7 @@ func MarkMessageNotificationsRead(db *sql.DB, userID int, chatID int64) error {
 	return err
 }
 
+// GetByID gets one notification, only if it belongs to this user
 func GetByID(db *sql.DB, userID int, notificationID int64) (models.Notification, error) {
 	return scanNotification(
 		db.QueryRow(
@@ -141,6 +158,9 @@ func GetByID(db *sql.DB, userID int, notificationID int64) (models.Notification,
 	)
 }
 
+// GetLatestForActor finds the newest notification of a type that came from a
+// specific person (actor). the follow request notification is made by a
+// database trigger, so we use this to find it and push it to the user live
 func GetLatestForActor(db *sql.DB, userID int, category, notificationType string, actorID int) (models.Notification, error) {
 	return scanNotification(
 		db.QueryRow(
@@ -160,6 +180,8 @@ func GetLatestForActor(db *sql.DB, userID int, category, notificationType string
 	)
 }
 
+// ListByRelatedID gets all notifications that point to the same thing
+// (like the same join request or the same event), so we can push them all live
 func ListByRelatedID(db *sql.DB, category, notificationType string, relatedID int64) ([]models.Notification, error) {
 	rows, err := db.Query(
 		notificationSelect+`
@@ -188,6 +210,7 @@ func ListByRelatedID(db *sql.DB, category, notificationType string, relatedID in
 	return result, rows.Err()
 }
 
+// IsCategory checks the category is one of the 4 we support
 func IsCategory(category string) bool {
 	switch category {
 	case "requests", "groups", "events":
@@ -199,6 +222,10 @@ func IsCategory(category string) bool {
 	}
 }
 
+// the base SELECT we use everywhere for notifications.
+// the joins add the current status of the thing the notification is about
+// (was the join request accepted? did i answer the invite? did i rsvp?)
+// so the page knows if it should still show the buttons or not
 const notificationSelect = `
 	SELECT
 		n.id,
@@ -233,10 +260,13 @@ const notificationSelect = `
 		AND gi.user_id = n.user_id
 `
 
+// small interface so scanNotification works with both QueryRow and Query rows
 type rowScanner interface {
 	Scan(dest ...any) error
 }
 
+// scanNotification reads one row into a Notification struct.
+// sqlite keeps is_read as 0/1 so we turn it into a bool at the end
 func scanNotification(row rowScanner) (models.Notification, error) {
 	var notification models.Notification
 	var isRead int

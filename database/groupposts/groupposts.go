@@ -1,3 +1,4 @@
+// database functions for posts and comments inside groups
 package groupposts
 
 import (
@@ -7,12 +8,14 @@ import (
 	"strings"
 )
 
+// errors we send back so the handler knows which status code to use
 var (
 	ErrPostNotFound    = errors.New("group post not found")
 	ErrCommentNotFound = errors.New("group post comment not found")
 	ErrNotOwner        = errors.New("group content belongs to another user")
 )
 
+// IsMember checks if the user is in the group. only members can see or post
 func IsMember(db *sql.DB, groupID int64, userID int) (bool, error) {
 	var isMember bool
 	err := db.QueryRow(`
@@ -25,6 +28,8 @@ func IsMember(db *sql.DB, groupID int64, userID int) (bool, error) {
 	return isMember, err
 }
 
+// PostBelongsToGroup makes sure the post is really in this group
+// (so you cant use a group you are in to reach a post from another group)
 func PostBelongsToGroup(db *sql.DB, groupID, postID int64) (bool, error) {
 	var exists bool
 	err := db.QueryRow(`
@@ -37,6 +42,7 @@ func PostBelongsToGroup(db *sql.DB, groupID, postID int64) (bool, error) {
 	return exists, err
 }
 
+// CreatePost saves a new group post and returns it with the author info
 func CreatePost(db *sql.DB, groupID int64, userID int, content, imagePath string) (models.GroupPost, error) {
 	content = strings.TrimSpace(content)
 	result, err := db.Exec(`
@@ -54,6 +60,7 @@ func CreatePost(db *sql.DB, groupID int64, userID int, content, imagePath string
 	return getPost(db, groupID, postID)
 }
 
+// ListPosts gets all the posts of a group, newest first
 func ListPosts(db *sql.DB, groupID int64) ([]models.GroupPost, error) {
 	rows, err := db.Query(groupPostSelect+`
 		WHERE gp.group_id = ?
@@ -75,6 +82,7 @@ func ListPosts(db *sql.DB, groupID int64) ([]models.GroupPost, error) {
 	return posts, rows.Err()
 }
 
+// CreateComment adds a comment on a group post. group comments are text only (1 to 200 chars)
 func CreateComment(db *sql.DB, postID int64, userID int, content, imagePath string) (models.GroupPostComment, error) {
 	content = strings.TrimSpace(content)
 	if imagePath != "" {
@@ -98,6 +106,8 @@ func CreateComment(db *sql.DB, postID int64, userID int, content, imagePath stri
 	return getComment(db, postID, commentID)
 }
 
+// ListComments gets the comments of a group post, oldest first.
+// pagination is optional: [limit, offset]
 func ListComments(db *sql.DB, postID int64, pagination ...int) ([]models.GroupPostComment, error) {
 	query := groupCommentSelect + `
 		WHERE gc.post_id = ?
@@ -126,6 +136,8 @@ func ListComments(db *sql.DB, postID int64, pagination ...int) ([]models.GroupPo
 	return comments, rows.Err()
 }
 
+// DeletePost deletes a group post if i am the owner.
+// we use a transaction so the check and the delete happen together
 func DeletePost(db *sql.DB, groupID, postID int64, userID int) error {
 	tx, err := db.Begin()
 	if err != nil {
@@ -134,6 +146,7 @@ func DeletePost(db *sql.DB, groupID, postID int64, userID int) error {
 	defer tx.Rollback()
 
 	var ownerID int
+	// first find who wrote the post
 	err = tx.QueryRow(`
 		SELECT user_id
 		FROM group_posts
@@ -166,6 +179,8 @@ func DeletePost(db *sql.DB, groupID, postID int64, userID int) error {
 	return tx.Commit()
 }
 
+// DeleteComment deletes a comment on a group post if i wrote it.
+// same idea as DeletePost: check the owner first, then delete
 func DeleteComment(db *sql.DB, groupID, postID, commentID int64, userID int) error {
 	tx, err := db.Begin()
 	if err != nil {
@@ -216,6 +231,7 @@ func DeleteComment(db *sql.DB, groupID, postID, commentID int64, userID int) err
 	return tx.Commit()
 }
 
+// base SELECT for group posts, with the author info and how many comments it has
 const groupPostSelect = `
 	SELECT
 		gp.id,
@@ -234,6 +250,7 @@ const groupPostSelect = `
 	LEFT JOIN profile p ON p.user_id = u.id
 `
 
+// getPost gets one post from a group
 func getPost(db *sql.DB, groupID, postID int64) (models.GroupPost, error) {
 	post, err := scanPost(db.QueryRow(groupPostSelect+`
 		WHERE gp.id = ? AND gp.group_id = ?
@@ -244,10 +261,12 @@ func getPost(db *sql.DB, groupID, postID int64) (models.GroupPost, error) {
 	return post, err
 }
 
+// lets scanPost and scanComment work with QueryRow and Query rows
 type rowScanner interface {
 	Scan(dest ...any) error
 }
 
+// scanPost reads one row into a GroupPost
 func scanPost(row rowScanner) (models.GroupPost, error) {
 	var post models.GroupPost
 	err := row.Scan(
@@ -266,6 +285,7 @@ func scanPost(row rowScanner) (models.GroupPost, error) {
 	return post, err
 }
 
+// base SELECT for group comments with the author info
 const groupCommentSelect = `
 	SELECT
 		gc.id,
@@ -283,12 +303,14 @@ const groupCommentSelect = `
 	LEFT JOIN profile p ON p.user_id = u.id
 `
 
+// getComment gets one comment of a post
 func getComment(db *sql.DB, postID, commentID int64) (models.GroupPostComment, error) {
 	return scanComment(db.QueryRow(groupCommentSelect+`
 		WHERE gc.id = ? AND gc.post_id = ?
 	`, commentID, postID))
 }
 
+// scanComment reads one row into a GroupPostComment
 func scanComment(row rowScanner) (models.GroupPostComment, error) {
 	var comment models.GroupPostComment
 	err := row.Scan(

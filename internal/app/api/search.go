@@ -62,6 +62,8 @@ func (app *App) Search(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// searchUsers finds people by username or name.
+// excludeGroupID is used by the group invite search to hide people already in the group
 func searchUsers(db *sql.DB, currentUserID int, query string, excludeGroupID int) ([]map[string]any, error) {
 	groupFilter := ""
 	args := []any{currentUserID, currentUserID}
@@ -129,6 +131,7 @@ func searchUsers(db *sql.DB, currentUserID int, query string, excludeGroupID int
 	return results, rows.Err()
 }
 
+// searchGroups finds groups by title or description and counts their members
 func searchGroups(db *sql.DB, pattern string) ([]map[string]any, error) {
 	rows, err := db.Query(`
 		SELECT
@@ -166,6 +169,7 @@ func searchGroups(db *sql.DB, pattern string) ([]map[string]any, error) {
 	return results, rows.Err()
 }
 
+// searchPosts finds posts by text, only ones i am allowed to see
 func searchPosts(db *sql.DB, currentUserID int, pattern string) ([]map[string]any, error) {
 	rows, err := db.Query(`
 		SELECT

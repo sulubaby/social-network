@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import IconGlyph from '@/components/layout/IconGlyph.vue'
 
+// inputId makes the input id unique for each post, disabled is true while sending
 defineProps({
   inputId: {
     type: String,
@@ -13,8 +14,10 @@ defineProps({
   },
 })
 
+// we dont send the comment from here, we give it to the PostCard with a submit event
 const emit = defineEmits(['submit'])
 
+// only small jpeg/png/gif pictures, same rules as the backend
 const MAX_FILE_SIZE = 5 * 1024 * 1024
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif']
 
@@ -24,16 +27,19 @@ const previewUrl = ref('')
 const imageError = ref('')
 const fileInput = ref(null)
 
+// PostCard calls this after the comment is sent to clear the box
 function reset() {
   content.value = ''
   removeImage()
 }
 defineExpose({ reset })
 
+// the picture button clicks the hidden file input
 function openFilePicker() {
   fileInput.value?.click()
 }
 
+// check the picked picture (type and size) and make a preview of it
 function selectImage(event) {
   const file = event.target.files[0] || null
 
@@ -66,6 +72,7 @@ function selectImage(event) {
   previewUrl.value = URL.createObjectURL(file)
 }
 
+// remove the picture and free the preview url
 function removeImage() {
   selectedImage.value = null
   imageError.value = ''
@@ -80,6 +87,7 @@ function removeImage() {
   }
 }
 
+// send the text and/or picture up to the PostCard. empty comments are ignored
 function submitComment() {
   const cleanContent = content.value.trim()
   if (!cleanContent && !selectedImage.value) return
@@ -90,6 +98,7 @@ function submitComment() {
 
 <template>
   <form class="comment-input" @submit.prevent="submitComment">
+    <!-- small preview of the picked picture -->
     <div v-if="previewUrl" class="comment-input__preview">
       <img :src="previewUrl" alt="Selected image preview" />
       <button type="button" aria-label="Remove image" @click="removeImage">
@@ -99,6 +108,7 @@ function submitComment() {
 
     <p v-if="imageError" class="comment-input__error" role="alert">{{ imageError }}</p>
 
+    <!-- text box, picture button, hidden file input and send button -->
     <div class="comment-input__row">
       <label class="visually-hidden" :for="inputId">Write a comment</label>
       <input

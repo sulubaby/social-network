@@ -1,3 +1,5 @@
+// handlers for the notifications page:
+// GET the list, mark one/all as read, and do the actions (accept, decline, join...)
 package api
 
 import (
@@ -14,6 +16,8 @@ import (
 	"strconv"
 )
 
+// Notifications handles GET /api/notifications
+// returns one page of the users notifications + the unread count
 func (app App) Notifications(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(int)
 	if !ok {
@@ -33,6 +37,7 @@ func (app App) Notifications(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// read limit and offset from the url
 	page, err := parsePage(r)
 	if err != nil {
 		helpers.WriteJson(w, http.StatusBadRequest, map[string]any{
@@ -43,6 +48,7 @@ func (app App) Notifications(w http.ResponseWriter, r *http.Request) {
 	}
 
 	category := r.URL.Query().Get("category")
+	// we ask for one extra row so we know if there is another page (hasMore)
 	result, err := notifications.List(app.DB, userID, category, page.Limit+1, page.Offset)
 	if errors.Is(err, notifications.ErrInvalidCategory) {
 		helpers.WriteJson(w, http.StatusBadRequest, map[string]any{
@@ -78,6 +84,7 @@ func (app App) Notifications(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// MarkNotificationRead handles PATCH /api/notifications/{id}/read
 func (app App) MarkNotificationRead(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(int)
 	if !ok {
@@ -117,6 +124,7 @@ func (app App) MarkNotificationRead(w http.ResponseWriter, r *http.Request) {
 	helpers.WriteJson(w, http.StatusOK, map[string]any{"status": true})
 }
 
+// MarkAllNotificationsRead handles PATCH /api/notifications/read-all
 func (app App) MarkAllNotificationsRead(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(int)
 	if !ok {
@@ -147,10 +155,13 @@ func (app App) MarkAllNotificationsRead(w http.ResponseWriter, r *http.Request) 
 	helpers.WriteJson(w, http.StatusOK, map[string]any{"status": true})
 }
 
+// body for the action request, like {"action": "accept"}
 type notificationActionRequest struct {
 	Action string `json:"action"`
 }
 
+// ApplyNotificationAction handles PATCH /api/notifications/{id}/action
+// this is when the user clicks a button inside a notification (accept, decline, join, rsvp)
 func (app App) ApplyNotificationAction(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(int)
 	if !ok {
@@ -184,6 +195,7 @@ func (app App) ApplyNotificationAction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var request notificationActionRequest
+	// read the body, small size limit and no unknown fields
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2<<10))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&request); err != nil {
@@ -194,6 +206,7 @@ func (app App) ApplyNotificationAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// make sure the notification exists and is mine
 	notification, err := notifications.GetByID(app.DB, userID, notificationID)
 	if errors.Is(err, sql.ErrNoRows) {
 		helpers.WriteJson(w, http.StatusNotFound, map[string]any{
@@ -210,6 +223,7 @@ func (app App) ApplyNotificationAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// do the actual action, not found errors become 404
 	if err := app.applyNotificationAction(userID, notification, request.Action); err != nil {
 		status := http.StatusBadRequest
 		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, groups.ErrGroupNotFound) || errors.Is(err, groups.ErrInvitationNotFound) || errors.Is(err, events.ErrEventNotFound) {
@@ -222,6 +236,7 @@ func (app App) ApplyNotificationAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// after the action is done the notification counts as read
 	if err := notifications.MarkRead(app.DB, userID, notificationID); err != nil {
 		helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
 			"status":  false,
@@ -236,10 +251,13 @@ func (app App) ApplyNotificationAction(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// applyNotificationAction decides what to do based on the category and type
+// of the notification and the button the user clicked
 func (app App) applyNotificationAction(userID int, notification models.Notification, action string) error {
 
 	switch notification.Category {
 
+	// follow requests: accept or decline
 	case "requests":
 		if notification.Type != "follow_request" || notification.ActorID == nil {
 			return errors.New("this request cannot be acted on")
@@ -266,6 +284,7 @@ func (app App) applyNotificationAction(userID int, notification models.Notificat
 			return errors.New("request action must be accept or decline")
 		}
 
+	// group stuff: join requests (for the group owner) and invitations (for the invited user)
 	case "groups":
 		if notification.RelatedID == nil {
 			return errors.New("group notification is missing its group")
@@ -273,6 +292,7 @@ func (app App) applyNotificationAction(userID int, notification models.Notificat
 
 		switch notification.Type {
 
+		// find which group the request is for, only if its still pending
 		case "join_request":
 			if notification.ActorID == nil {
 				return errors.New("join request is missing requester")
@@ -313,6 +333,7 @@ func (app App) applyNotificationAction(userID int, notification models.Notificat
 				)
 			}
 
+		// someone invited me to a group
 		case "invitation":
 			switch action {
 			case "join":
@@ -339,6 +360,7 @@ func (app App) applyNotificationAction(userID int, notification models.Notificat
 			return errors.New("unsupported group notification type")
 		}
 
+	// new event in my group: going or not going
 	case "events":
 		if notification.RelatedID == nil {
 			return errors.New("event notification is missing its event")

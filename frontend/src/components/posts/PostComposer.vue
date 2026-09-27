@@ -7,8 +7,10 @@ import { normalizePostAudience } from '@/helpers/postAudience.js'
 import IconGlyph from '@/components/layout/IconGlyph.vue'
 import LocationDialog from './LocationDialog.vue'
 
+// tells the home feed when a post is made so it can show it on top
 const emit = defineEmits(['post-created'])
 
+// my avatar, shown next to the text box
 const props = defineProps({
   avatar: {
     type: String,
@@ -16,8 +18,10 @@ const props = defineProps({
   }
 })
 
+// same 5MB limit as the backend
 const MAX_FILE_SIZE = 5 * 1024 * 1024
 
+// everything the user types or picks in the post box
 const content = ref('')
 const postVisibility = ref('public')
 const feeling = ref('')
@@ -36,6 +40,7 @@ const message = ref('')
 const messageType = ref('success')
 const isPosting = ref(false)
 
+// loads my followers (20 at a time) for the "selected followers" option
 async function loadFollowers({ append = false } = {}) {
   if (isLoadingFollowers.value) {
     return
@@ -70,10 +75,12 @@ async function loadFollowers({ append = false } = {}) {
   }
 }
 
+// the load more button in the followers list
 function loadMoreFollowers() {
   loadFollowers({ append: true })
 }
 
+// when a picture is picked: check the size and make a preview url for it
 function selectFile(event) {
   const file = event.target.files[0] || null
 
@@ -98,10 +105,12 @@ function selectFile(event) {
     : ''
 }
 
+// the Photo / GIF button clicks the hidden file input
 function openFilePicker() {
   fileInput.value?.click()
 }
 
+// remove the picked picture and free the preview url
 function removeFile() {
   selectedFile.value = null
 
@@ -115,6 +124,7 @@ function removeFile() {
   }
 }
 
+// the location popup gives back "name:lat:lon"
 function handleLocationSelected(value) {
   location.value = value
   showLocationDialog.value = false
@@ -125,6 +135,7 @@ function removeLocation() {
   location.value = ''
 }
 
+// only the name part of the location, for showing it
 const locationLabel = computed(() => {
   if (!location.value) {
     return ''
@@ -133,6 +144,8 @@ const locationLabel = computed(() => {
   return location.value.split(':')[0].trim()
 })
 
+// the post button only works when there is text or a picture,
+// and if privacy is selected at least one person must be picked
 const canPost = computed(() => {
   const hasContent =
     content.value.trim() !== '' ||
@@ -150,6 +163,8 @@ const canPost = computed(() => {
   )
 })
 
+// builds the form and sends the post.
+// we use FormData because it can carry the image file too
 async function preparePost() {
   if (!canPost.value) {
     return
@@ -180,6 +195,7 @@ async function preparePost() {
   message.value = ''
 
   try {
+    // send it. if it works we clear the form and tell the feed
     const result = await createPost(formData)
 
     if (!result?.status) {
@@ -210,6 +226,8 @@ async function preparePost() {
   }
 }
 
+// when privacy changes: if its not selected, clear the picked people.
+// if it is selected, load the followers (only the first time)
 watch(postVisibility, (value) => {
   if (value !== 'selected') {
     selectedFollowerIds.value = []
@@ -226,6 +244,7 @@ watch(postVisibility, (value) => {
 </script>
 
 <template>
+  <!-- the whole post box. submit runs preparePost -->
   <form class="post-composer orbit-surface" @submit.prevent="preparePost">
     <div class="post-composer__input-row">
       <div class="post-composer__avatar">
@@ -242,6 +261,7 @@ watch(postVisibility, (value) => {
         rows="2" @input="message = ''" />
     </div>
 
+    <!-- picked picture name + preview -->
     <div v-if="selectedFile" class="selected-file">
       <span>{{ selectedFile.name }}</span>
 
@@ -254,6 +274,7 @@ watch(postVisibility, (value) => {
       <img :src="previewUrl" alt="Preview of the selected media" />
     </div>
 
+    <!-- picked location with an x to remove it -->
     <div v-if="locationLabel" class="selected-location">
       <div class="selected-location__icon">
         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -272,6 +293,7 @@ watch(postVisibility, (value) => {
       </button>
     </div>
 
+    <!-- bottom bar: photo, location, privacy and the post button -->
     <div class="post-composer__toolbar">
       <div class="post-composer__tools">
         <button class="composer-action composer-action--media" type="button" @click="openFilePicker">
@@ -296,6 +318,7 @@ watch(postVisibility, (value) => {
       </div>
 
       <div class="post-composer__actions">
+        <!-- privacy dropdown -->
         <label class="privacy-control">
           <IconGlyph name="globe" :size="16" />
 
@@ -332,6 +355,7 @@ watch(postVisibility, (value) => {
           </template>
         </p>
 
+        <!-- list of my followers with checkboxes, only for selected privacy -->
         <div v-if="postVisibility === 'selected'" class="selected-followers">
           <p class="selected-followers__label">
             Choose approved followers
@@ -390,6 +414,7 @@ watch(postVisibility, (value) => {
       </div>
     </div>
 
+    <!-- success or error message -->
     <p v-if="message" class="post-composer__message" :class="{
       'post-composer__message--error':
         messageType === 'error'
@@ -397,6 +422,7 @@ watch(postVisibility, (value) => {
       {{ message }}
     </p>
 
+    <!-- popup to search and pick a location -->
     <LocationDialog v-if="showLocationDialog" :model-value="location" @update:model-value="handleLocationSelected"
       @close="showLocationDialog = false" />
   </form>

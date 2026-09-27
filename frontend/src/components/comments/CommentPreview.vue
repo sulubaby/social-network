@@ -1,6 +1,7 @@
 <script setup>
 import CommentMenu from '@/components/comments/CommentMenu.vue'
 
+// shows one comment. deleting is true while this comment is being deleted
 defineProps({
   comment: {
     type: Object,
@@ -14,11 +15,13 @@ defineProps({
 
 const emit = defineEmits(['delete'])
 
+// builds the image url for avatar or comment picture
 function imageUrl(imagePath) {
   if (!imagePath) return ''
   return imagePath.startsWith('/') ? imagePath : `/uploads/${imagePath}`
 }
 
+// first 2 letters of the name when there is no avatar
 function initials(author) {
   return author.slice(0, 2).toUpperCase()
 }
@@ -34,6 +37,7 @@ function initials(author) {
       <div class="comment-preview__header">
         <strong>{{ comment.author }}</strong>
 
+        <!-- delete menu, only on my own comments -->
         <CommentMenu v-if="comment.own" :disabled="deleting" @remove="emit('delete')" />
       </div>
       <p v-if="comment.content">{{ comment.content }}</p>

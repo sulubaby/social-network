@@ -1,3 +1,5 @@
+// handlers for group posts and their comments. every handler first checks
+// that you are a member of the group
 package api
 
 import (
@@ -12,6 +14,7 @@ import (
 	"strings"
 )
 
+// GetGroupPosts handles GET /api/groups/{id}/posts
 func (app App) GetGroupPosts(w http.ResponseWriter, r *http.Request) {
 	userID, groupID, ok := groupRequestIdentity(w, r)
 	if !ok || !app.requireGroupMember(w, groupID, userID) {
@@ -29,12 +32,15 @@ func (app App) GetGroupPosts(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"status": true, "posts": posts})
 }
 
+// CreateGroupPost handles POST /api/groups/{id}/posts
+// the post can have text, an image, or both
 func (app App) CreateGroupPost(w http.ResponseWriter, r *http.Request) {
 	userID, groupID, ok := groupRequestIdentity(w, r)
 	if !ok || !app.requireGroupMember(w, groupID, userID) {
 		return
 	}
 
+	// read and check the form (text length + image type and size)
 	form, err := parseGroupContentForm(w, r, maxPostBodySize, maxPostImageSize, 500, "post")
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"status": false, "message": err.Error()})
@@ -44,6 +50,7 @@ func (app App) CreateGroupPost(w http.ResponseWriter, r *http.Request) {
 		defer form.file.Close()
 	}
 
+	// save the image if there is one
 	imagePath := ""
 	if form.file != nil {
 		imagePath, err = helpers.SaveUploads(form.file, form.header, "post")
@@ -62,6 +69,7 @@ func (app App) CreateGroupPost(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]any{"status": true, "post": post})
 }
 
+// GetGroupPostComments handles GET /api/groups/{id}/posts/{postID}/comments (one page)
 func (app App) GetGroupPostComments(w http.ResponseWriter, r *http.Request) {
 	userID, groupID, postID, ok := groupPostRequestIdentity(w, r)
 	if !ok || !app.requireGroupMember(w, groupID, userID) {
@@ -94,6 +102,7 @@ func (app App) GetGroupPostComments(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// CreateGroupPostComment handles POST on the same url. group comments are text only
 func (app App) CreateGroupPostComment(w http.ResponseWriter, r *http.Request) {
 	userID, groupID, postID, ok := groupPostRequestIdentity(w, r)
 	if !ok || !app.requireGroupMember(w, groupID, userID) {
@@ -118,6 +127,8 @@ func (app App) CreateGroupPostComment(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]any{"status": true, "comment": comment})
 }
 
+// DeleteGroupPost handles DELETE /api/groups/{id}/posts/{postID}
+// 404 if the post is not there, 403 if its not mine
 func (app App) DeleteGroupPost(w http.ResponseWriter, r *http.Request) {
 	userID, groupID, postID, ok := groupPostRequestIdentity(w, r)
 	if !ok || !app.requireGroupMember(w, groupID, userID) {
@@ -140,6 +151,7 @@ func (app App) DeleteGroupPost(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"status": true, "message": "post deleted"})
 }
 
+// DeleteGroupPostComment handles DELETE .../comments/{commentID}, same rules as above
 func (app App) DeleteGroupPostComment(w http.ResponseWriter, r *http.Request) {
 	userID, groupID, postID, ok := groupPostRequestIdentity(w, r)
 	if !ok || !app.requireGroupMember(w, groupID, userID) {
@@ -167,6 +179,8 @@ func (app App) DeleteGroupPostComment(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"status": true, "message": "comment deleted"})
 }
 
+// groupRequestIdentity gets the logged in user id and the group id from the url.
+// if something is wrong it already wrote the error, so the handler just returns
 func groupRequestIdentity(w http.ResponseWriter, r *http.Request) (int, int64, bool) {
 	userID, ok := r.Context().Value("userID").(int)
 	if !ok || userID <= 0 {
@@ -181,6 +195,7 @@ func groupRequestIdentity(w http.ResponseWriter, r *http.Request) (int, int64, b
 	return userID, groupID, true
 }
 
+// same as groupRequestIdentity but also reads the post id
 func groupPostRequestIdentity(w http.ResponseWriter, r *http.Request) (int, int64, int64, bool) {
 	userID, groupID, ok := groupRequestIdentity(w, r)
 	if !ok {
@@ -194,6 +209,7 @@ func groupPostRequestIdentity(w http.ResponseWriter, r *http.Request) (int, int6
 	return userID, groupID, postID, true
 }
 
+// requireGroupMember sends 403 if the user is not in the group
 func (app App) requireGroupMember(w http.ResponseWriter, groupID int64, userID int) bool {
 	isMember, err := groupposts.IsMember(app.DB, groupID, userID)
 	if err != nil {
@@ -207,6 +223,7 @@ func (app App) requireGroupMember(w http.ResponseWriter, groupID int64, userID i
 	return true
 }
 
+// requireGroupPost sends 404 if the post is not in this group
 func (app App) requireGroupPost(w http.ResponseWriter, groupID, postID int64) bool {
 	exists, err := groupposts.PostBelongsToGroup(app.DB, groupID, postID)
 	if err != nil {
@@ -220,12 +237,18 @@ func (app App) requireGroupPost(w http.ResponseWriter, groupID, postID int64) bo
 	return true
 }
 
+// what we got from the post form: the text and maybe an image file
 type groupContentForm struct {
 	content string
 	file    multipart.File
 	header  *multipart.FileHeader
 }
 
+// parseGroupContentForm reads a multipart form and checks it:
+// - body not too big
+// - image (if any) is jpeg/png/gif and under the size limit
+// - there is text or an image, and the text is not too long
+// if it fails we close the file so it doesnt stay open
 func parseGroupContentForm(w http.ResponseWriter, r *http.Request, maxBody, maxImage int64, maxText int, kind string) (groupContentForm, error) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxBody)
 	if err := r.ParseMultipartForm(maxBody); err != nil {
@@ -245,6 +268,7 @@ func parseGroupContentForm(w http.ResponseWriter, r *http.Request, maxBody, maxI
 			return groupContentForm{}, errors.New(kind + " image must be smaller than 5 MB")
 		}
 
+		// check the real type from the first bytes of the file
 		buffer := make([]byte, 512)
 		read, readErr := file.Read(buffer)
 		if readErr != nil && readErr != io.EOF {
@@ -271,6 +295,8 @@ func parseGroupContentForm(w http.ResponseWriter, r *http.Request, maxBody, maxI
 	return form, nil
 }
 
+// parseTextComment reads a json comment like {"content": "..."}
+// and makes sure its 1 to 200 characters
 func parseTextComment(w http.ResponseWriter, r *http.Request) (string, error) {
 	if strings.HasPrefix(strings.ToLower(r.Header.Get("Content-Type")), "multipart/form-data") {
 		return "", errors.New("comment images are not supported; send text only")

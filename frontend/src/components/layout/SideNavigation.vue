@@ -7,6 +7,7 @@ import { getGroups } from '@/api/groups/Groups'
 import { onMounted, ref } from 'vue'
 import IconGlyph from './IconGlyph.vue'
 
+// activePage is the page we are on, so its link gets highlighted
 defineProps({
   activePage: {
     type: String,
@@ -14,6 +15,7 @@ defineProps({
   },
 })
 
+// up to 4 of my groups shown under the menu
 const myGroups = ref([])
 
 onMounted(async () => {
@@ -25,6 +27,7 @@ onMounted(async () => {
   }
 })
 
+// the menu links. badgeType says which red number to show next to it
 const links = [
   { name: 'home', label: 'Home', href: '/home-feed', icon: 'home' },
   { name: 'profile', label: 'Profile', href: '/profile', icon: 'profile' },
@@ -34,9 +37,11 @@ const links = [
   { name: 'settings', label: 'Settings', href: '/settings', icon: 'settings' },
 ]
 
+// unread numbers for the badges
 const { unreadCount: notificationUnreadCount } = useNotifications()
 const { chatCount } = useChatCount()
 
+// log out, if it fails show a small error popup
 async function logoutHandler() {
     try {
         await logout();
@@ -50,6 +55,7 @@ async function logoutHandler() {
 
 <template>
   <aside class="side-navigation">
+    <!-- main menu for big screens -->
     <nav aria-label="Main navigation">
       <a v-for="link in links" :key="link.name" class="navigation-link"
         :class="{ 'navigation-link--active': activePage === link.name }" :href="link.href"
@@ -66,6 +72,7 @@ async function logoutHandler() {
       </a>
     </nav>
 
+    <!-- my groups shortcuts -->
     <section v-if="myGroups.length" class="my-groups" aria-labelledby="my-groups-title">
       <h2 id="my-groups-title">My groups</h2>
       <a v-for="group in myGroups" :key="group.id" :href="`/groups/${group.id}`" class="my-group-link">
@@ -77,6 +84,7 @@ async function logoutHandler() {
     <button class="logout-link" type="button" @click="logoutHandler"><IconGlyph name="logout" :size="18" /> <span>Log out</span></button>
   </aside>
 
+  <!-- same links as a bottom bar on phones -->
   <nav class="mobile-navigation" aria-label="Mobile navigation">
     <a v-for="link in links" :key="link.name" class="mobile-link"
       :class="{ 'mobile-link--active': activePage === link.name }" :href="link.href" :aria-label="link.label"

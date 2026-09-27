@@ -2,6 +2,8 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { getNotifications } from '@/api/notifications.js'
 import { subscribeRealtime } from '@/services/realtime.js'
 
+// this state is outside the function on purpose, so the top bar and the
+// sidebar share the same list instead of each loading their own
 const items = ref([])
 const unreadCount = ref(0)
 const error = ref('')
@@ -11,6 +13,8 @@ let stopNotificationListener
 let stopConnectionListener
 const NOTIFICATION_PREVIEW_SIZE = 12
 
+// runs when a new notification comes from the websocket.
+// if we already have it we update it, if not we put it on top and add to the unread count
 function receiveNotification(event) {
   const notification = event?.notification
   if (!notification?.id) return

@@ -14,9 +14,13 @@ import (
 	"strings"
 )
 
+// max size for the whole post request and for the image
 const maxPostBodySize = 6 << 20
 const maxPostImageSize = 5 * 1024 * 1024
 
+// CreatePost handles POST /api/posts
+// the frontend sends a multipart form: content, privacy, location,
+// selectedFollowerIds (json list) and maybe an image
 func (app App) CreatePost(w http.ResponseWriter, r *http.Request) {
 	userID, err := authenticatedUserID(r)
 	if err != nil {
@@ -36,6 +40,7 @@ func (app App) CreatePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// read the text fields from the form
 	request := models.CreatePostRequest{
 		Content:  r.FormValue("content"),
 		Privacy:  r.FormValue("privacy"),
@@ -52,6 +57,7 @@ func (app App) CreatePost(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// the image is optional
 	imageFile, imageHeader, fileErr := r.FormFile("image")
 
 	if fileErr != nil && fileErr != http.ErrMissingFile {
@@ -73,6 +79,7 @@ func (app App) CreatePost(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// check the real file type from the first bytes (only jpeg, png, gif)
 		fileBytes := make([]byte, 512)
 		bytesRead, readErr := imageFile.Read(fileBytes)
 
@@ -105,6 +112,7 @@ func (app App) CreatePost(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// check the text, location, privacy and selected followers before saving anything
 	request.Content = strings.TrimSpace(request.Content)
 	if request.Content == "" || len([]rune(request.Content)) > 500 {
 		writeJSON(w, http.StatusBadRequest, map[string]any{
@@ -135,6 +143,7 @@ func (app App) CreatePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// everything is valid, now we can save the image
 	if fileErr == nil {
 		imagePath, saveErr := helpers.SaveUploads(imageFile, imageHeader, "post")
 		if saveErr != nil {
@@ -148,6 +157,7 @@ func (app App) CreatePost(w http.ResponseWriter, r *http.Request) {
 		request.ImagePath = imagePath
 	}
 
+	// save the post in the database
 	post, err := posts.CreatePost(app.DB, userID, request)
 	if errors.Is(err, posts.ErrSelectedFollowersRequired) || errors.Is(err, posts.ErrInvalidPostViewer) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{
@@ -170,6 +180,9 @@ func (app App) CreatePost(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ListPosts handles GET /api/posts
+// with ?userID= it returns that users posts (for the profile page),
+// without it, it returns the home feed
 func (app App) ListPosts(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(int)
 	if !ok {
@@ -189,6 +202,7 @@ func (app App) ListPosts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// profile page posts
 	queryUserID := r.URL.Query().Get("userID")
 	if queryUserID != "" {
 		requestUserID, err := strconv.Atoi(queryUserID)
@@ -210,6 +224,7 @@ func (app App) ListPosts(w http.ResponseWriter, r *http.Request) {
 		}
 		
 		var filteredPosts []models.Post
+		// if its not my profile, hide the posts i am not allowed to see
 		if requestUserID != userID {
 			filteredPosts, err = posts.FilterPosts(app.DB, &userPosts, userID)
 			if err != nil {
@@ -230,6 +245,7 @@ func (app App) ListPosts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// home feed. we ask for one extra post to know if there is a next page
 	feedPosts, err := posts.ListFeedPosts(app.DB, userID, page.Limit+1, page.Offset)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{
@@ -248,6 +264,7 @@ func (app App) ListPosts(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// authenticatedUserID reads the token cookie and gives back the user id inside it
 func authenticatedUserID(r *http.Request) (int, error) {
 	cookie, err := r.Cookie("token")
 	if err != nil || cookie.Value == "" {
@@ -265,12 +282,15 @@ func authenticatedUserID(r *http.Request) (int, error) {
 	return payload.UserID, nil
 }
 
+// writeJSON sends a json response with a status code
 func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
 }
 
+// DeletePost handles DELETE /api/posts with a body like {"postID": 5}
+// the database part makes sure only the owner can delete it
 func (app *App) DeletePost(w http.ResponseWriter, r *http.Request) {
 	userID, err := authenticatedUserID(r)
 	if err != nil {

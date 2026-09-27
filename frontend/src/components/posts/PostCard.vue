@@ -14,6 +14,7 @@ import {
 
 import { setPostLike } from '@/api/posts/posts.js'
 
+// the post we get from the parent (home feed or profile page)
 const props = defineProps({
   post: {
     type: Object,
@@ -21,10 +22,12 @@ const props = defineProps({
   },
 })
 
+// we tell the parent when the post got deleted so it can remove it from the list
 const emit = defineEmits(['deleted'])
 
 const route = useRoute()
 
+// comments state (they only load when you open the comments)
 const comments = ref([])
 const commentInput = ref(null)
 const commentsError = ref('')
@@ -38,17 +41,21 @@ const commentsSentinel = ref(null)
 const commentsOffset = ref(0)
 const isSubmittingComment = ref(false)
 
+// comment delete state
 const deletingCommentIds = ref([])
 const deletedCommentCount = ref(0)
 const commentDeleteError = ref('')
 
+// like state, starts with what the server told us
 const isLiked = ref(Boolean(props.post.liked))
 const likeCount = ref(Number(props.post.likes) || 0)
 const isLikePending = ref(false)
 const likeError = ref('')
 
+// location map popup
 const showLocationDialog = ref(false)
 
+// the ... menu and the delete post popup
 const showPostMenu = ref(false)
 const showDeleteDialog = ref(false)
 const isDeletingPost = ref(false)
@@ -58,10 +65,13 @@ const COMMENTS_PAGE_SIZE = 20
 
 let commentsObserver
 
+// the delete menu only shows on my own profile page
 const canManagePost = computed(() => {
   return route.path === '/me' || route.path === '/profile'
 })
 
+// comment number on the button. we take away the ones i deleted
+// so the number updates without reloading
 const commentCount = computed(() => {
   const postComments = Number(props.post.comments) || 0
 
@@ -71,6 +81,7 @@ const commentCount = computed(() => {
   ) - deletedCommentCount.value
 })
 
+// builds the image url. images are served from /uploads/
 function imageUrl(imagePath) {
   if (!imagePath) return ''
 
@@ -79,6 +90,8 @@ function imageUrl(imagePath) {
     : `/uploads/${imagePath}`
 }
 
+// location is saved as "name:lat:lon", here we split it.
+// if its broken we just dont show a location
 const postLocation = computed(() => {
   if (!props.post.location) return null
 
@@ -105,6 +118,7 @@ const postLocation = computed(() => {
   }
 })
 
+// link to open the place in google maps
 const googleMapsUrl = computed(() => {
   if (!postLocation.value) return ''
 
@@ -115,6 +129,7 @@ const googleMapsUrl = computed(() => {
   )}`
 })
 
+// small google map shown inside the popup
 const googleMapsEmbedUrl = computed(() => {
   if (!postLocation.value) return ''
 
@@ -125,6 +140,7 @@ const googleMapsEmbedUrl = computed(() => {
   )}&output=embed`
 })
 
+// open / close the map popup (escape key closes it too)
 function openLocationDialog() {
   if (!postLocation.value) return
 
@@ -141,6 +157,7 @@ function handleLocationKeydown(event) {
   }
 }
 
+// open / close the ... menu
 function togglePostMenu() {
   if (!canManagePost.value || isDeletingPost.value) return
 
@@ -151,6 +168,7 @@ function closePostMenu() {
   showPostMenu.value = false
 }
 
+// the "are you sure?" popup before deleting
 function openDeleteDialog() {
   if (!canManagePost.value || isDeletingPost.value) return
 
@@ -173,6 +191,8 @@ function handleDeleteDialogKeydown(event) {
   }
 }
 
+// deletes the post (DELETE /api/posts with the post id).
+// if it works we tell the parent so the card disappears
 async function deletePost() {
   if (!canManagePost.value || isDeletingPost.value) return
 
@@ -215,6 +235,7 @@ async function deletePost() {
   }
 }
 
+// shows time like "5m", "3h", "2d", "1w". older posts show the date
 function formatRelativeTime(dateValue) {
   if (!dateValue) return ''
 
@@ -254,6 +275,7 @@ const formattedTime = computed(() =>
   formatRelativeTime(props.post.time),
 )
 
+// fills missing stuff on a comment before we show it
 function commentForPreview(comment) {
   return {
     ...comment,
@@ -262,6 +284,8 @@ function commentForPreview(comment) {
   }
 }
 
+// loads the comments of this post.
+// append = true loads the next page when you scroll down inside the comments
 async function loadComments({ append = false } = {}) {
   if (append) {
     if (
@@ -297,6 +321,8 @@ async function loadComments({ append = false } = {}) {
       ? [...comments.value, ...nextComments]
       : nextComments
 
+    // remove duplicates (by id) and sort oldest first,
+    // so a comment never shows twice if pages overlap
     const uniqueComments = new Map(
       combinedComments.map((comment) => [
         comment.id,
@@ -336,6 +362,7 @@ async function loadComments({ append = false } = {}) {
   }
 }
 
+// infinite scroll inside the comments box
 function observeCommentsEnd() {
   commentsObserver?.disconnect()
 
@@ -367,6 +394,7 @@ function observeCommentsEnd() {
   commentsObserver.observe(commentsSentinel.value)
 }
 
+// the try again button when comments fail to load
 async function retryComments() {
   await loadComments({
     append:
@@ -384,6 +412,7 @@ function closeComments() {
   commentsObserver?.disconnect()
 }
 
+// sends a new comment and adds it at the bottom of the list
 async function addComment(comment) {
   isSubmittingComment.value = true
   commentsError.value = ''
@@ -411,6 +440,7 @@ async function addComment(comment) {
   }
 }
 
+// deletes one of my comments. deletingCommentIds stops double clicks on the same one
 async function removeComment(commentId) {
   if (
     deletingCommentIds.value.includes(commentId)
@@ -456,6 +486,7 @@ async function removeComment(commentId) {
   }
 }
 
+// like / unlike. we wait for the server and then use the real count it sends back
 async function toggleLike() {
   if (isLikePending.value) return
 
@@ -485,6 +516,7 @@ async function toggleLike() {
   }
 }
 
+// open or close the comments. first time we open them we load them
 async function toggleComments() {
   areCommentsOpen.value =
     !areCommentsOpen.value
@@ -500,6 +532,7 @@ async function toggleComments() {
   }
 }
 
+// first 2 letters of the name, used when there is no avatar picture
 function initials(author) {
   if (!author) return '?'
 
@@ -508,6 +541,7 @@ function initials(author) {
     .toUpperCase()
 }
 
+// stop the scroll watcher when the card is removed
 onBeforeUnmount(() => {
   commentsObserver?.disconnect()
 })
@@ -515,8 +549,10 @@ onBeforeUnmount(() => {
 
 <template>
   <article class="post-card orbit-surface">
+    <!-- top of the post: avatar, name, time, privacy, location and the ... menu -->
     <header class="post-card__header">
       <div class="post-card__author-area">
+        <!-- clicking the author opens their profile -->
         <RouterLink
           v-if="post.authorId"
           class="post-card__author-link"
@@ -592,6 +628,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
+        <!-- location button, opens the map popup -->
         <button
           v-if="postLocation"
           type="button"
@@ -619,6 +656,7 @@ onBeforeUnmount(() => {
           </span>
         </button>
 
+        <!-- ... menu with delete (only on my profile) -->
         <div
           v-if="canManagePost"
           class="post-card__menu"
@@ -662,6 +700,7 @@ onBeforeUnmount(() => {
       {{ post.content }}
     </p>
 
+    <!-- post image if there is one -->
     <div
       v-if="post.imagePath"
       class="post-card__media post-card__media--uploaded"
@@ -694,6 +733,7 @@ onBeforeUnmount(() => {
       />
     </div>
 
+    <!-- like and comment buttons -->
     <footer class="post-card__actions">
       <button
         class="post-action"
@@ -758,6 +798,7 @@ onBeforeUnmount(() => {
       {{ deleteError }}
     </p>
 
+    <!-- the comments box, only shows when opened -->
     <section
       v-if="areCommentsOpen"
       :id="`comments-${post.id}`"
@@ -789,6 +830,7 @@ onBeforeUnmount(() => {
         </button>
       </header>
 
+      <!-- loading / error / no comments / the comment list -->
       <p
         v-if="isLoadingComments"
         class="comments-state"
@@ -835,6 +877,7 @@ onBeforeUnmount(() => {
           @delete="removeComment(comment.id)"
         />
 
+        <!-- empty div for loading more comments on scroll -->
         <div
           ref="commentsSentinel"
           class="comments-sentinel"
@@ -874,6 +917,7 @@ onBeforeUnmount(() => {
         </button>
       </div>
 
+      <!-- box to write a comment -->
       <CommentInput
         ref="commentInput"
         :input-id="`comment-${post.id}`"
@@ -882,6 +926,7 @@ onBeforeUnmount(() => {
       />
     </section>
 
+    <!-- map popup. Teleport puts it on the body so it covers the whole page -->
     <Teleport to="body">
       <div
         v-if="
@@ -968,6 +1013,7 @@ onBeforeUnmount(() => {
       </div>
     </Teleport>
 
+    <!-- delete confirm popup -->
     <Teleport to="body">
       <div
         v-if="showDeleteDialog"
