@@ -1,10 +1,10 @@
 <script setup>
 
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, watch } from 'vue'
 
 import IconGlyph from '@/components/layout/IconGlyph.vue'
 
-defineProps({
+const props = defineProps({
   sending: {
     type: Boolean,
     default: false
@@ -16,6 +16,7 @@ const emit = defineEmits(['send'])
 const content = ref('')
 const showEmojiPicker = ref(false)
 const textarea = ref(null)
+let focusAfterSend = false
 
 const emojis = [
   '😀', '😂', '🤣', '😊', '😍', '🥰', '😘', '😎',
@@ -30,8 +31,17 @@ function submit() {
 
   emit('send', content.value, () => {
     content.value = ''
+    focusAfterSend = true
   })
 }
+
+watch(() => props.sending, async sending => {
+  if (sending || !focusAfterSend) return
+
+  await nextTick()
+  textarea.value?.focus()
+  focusAfterSend = false
+})
 
 function handleKeydown(event) {
   if (event.key === 'Enter' && !event.shiftKey) {

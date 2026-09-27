@@ -12,26 +12,64 @@ const props = defineProps({
 const emit = defineEmits(['reach-top'])
 const thread = ref(null)
 let previousScrollHeight = 0
+let previousScrollTop = 0
+let firstMessageIdBeforeOlderLoad = null
+let preserveOlderScroll = false
+let isNearBottom = true
+let initialized = false
+let openingChat = props.loading
 
-watch(() => [props.loading, props.messages.length], async ([loading, messageCount], [previousLoading, previousMessageCount] = []) => {
+watch(() => [props.loading, props.messages], async ([loading, currentMessages], [previousLoading, previousMessages] = []) => {
+  const messagesChanged = currentMessages !== previousMessages
+  const previousMessageCount = previousMessages?.length || 0
+  const messageCount = currentMessages.length
+  const olderMessagesWerePrepended = preserveOlderScroll
+    && messageCount > previousMessageCount
+    && currentMessages[0]?.id !== firstMessageIdBeforeOlderLoad
+
+  if (loading && previousLoading === false) openingChat = true
+
+  const shouldOpenAtBottom = !initialized
+    || (openingChat && messagesChanged)
+    || (openingChat && !loading)
+  const shouldFollowNewMessage = messagesChanged && props.autoScroll && isNearBottom
+
   await nextTick()
   if (!thread.value) return
 
-  if (props.loadingOlder && messageCount > previousMessageCount) {
+  if (olderMessagesWerePrepended) {
     // Keep the first visible old message anchored while earlier rows are added.
-    thread.value.scrollTop += thread.value.scrollHeight - previousScrollHeight
+    thread.value.scrollTop = previousScrollTop + thread.value.scrollHeight - previousScrollHeight
+    preserveOlderScroll = false
     return
   }
 
-  if (props.autoScroll && (loading !== previousLoading || messageCount !== previousMessageCount)) {
+  if (shouldOpenAtBottom || shouldFollowNewMessage) {
     thread.value.scrollTop = thread.value.scrollHeight
   }
-})
+
+  initialized = true
+  if (shouldOpenAtBottom) openingChat = false
+}, { immediate: true, flush: 'post' })
+
+watch(() => props.loadingOlder, (loading, wasLoading) => {
+  if (wasLoading && !loading && props.messages[0]?.id === firstMessageIdBeforeOlderLoad) {
+    preserveOlderScroll = false
+  }
+}, { flush: 'post' })
 
 function handleScroll() {
-  if (!thread.value || !props.canLoadOlder || props.loadingOlder) return
+  if (!thread.value) return
+
+  const distanceFromBottom = thread.value.scrollHeight - thread.value.scrollTop - thread.value.clientHeight
+  isNearBottom = distanceFromBottom <= 80
+
+  if (!props.canLoadOlder || props.loadingOlder) return
   if (thread.value.scrollTop <= 80) {
     previousScrollHeight = thread.value.scrollHeight
+    previousScrollTop = thread.value.scrollTop
+    firstMessageIdBeforeOlderLoad = props.messages[0]?.id ?? null
+    preserveOlderScroll = true
     emit('reach-top')
   }
 }
