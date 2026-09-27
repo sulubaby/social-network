@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { router } from '@/router/router.js'
 import { useRoute } from 'vue-router'
 import {
@@ -29,6 +29,15 @@ const isJoinPending = ref(false)
 const joinError = ref('')
 const activeSection = ref('overview')
 
+// group posts paging: 20 at a time, the next page loads when the empty div
+// at the bottom of the list gets close to the screen
+const GROUP_POSTS_PAGE_SIZE = 20
+const groupPostsOffset = ref(0)
+const hasMorePosts = ref(false)
+const loadingMorePosts = ref(false)
+const postsSentinel = ref(null)
+let postsObserver
+
 const groupSections = [
     { id: 'overview', label: 'Overview', icon: 'groups' },
     { id: 'activity', label: 'Activity & events', icon: 'calendar' },
@@ -43,8 +52,7 @@ onMounted(async () => {
         group.value = result.group
         if (group.value?.isMember) {
             activeSection.value = 'posts'
-            const postsResult = await getGroupPosts(groupId)
-            groupPosts.value = postsResult?.posts || []
+            await loadGroupPosts()
         }
     } catch (err) {
         console.error(err)
@@ -52,7 +60,47 @@ onMounted(async () => {
     } finally {
         loading.value = false
     }
+
+    // the sentinel only exists after the page finished loading
+    await nextTick()
+    observePostsEnd()
 })
+
+onBeforeUnmount(() => postsObserver?.disconnect())
+
+// loads one page of group posts. append = true adds the next page at the bottom
+async function loadGroupPosts(append = false) {
+    if (append && (loadingMorePosts.value || !hasMorePosts.value)) return
+    if (append) loadingMorePosts.value = true
+
+    try {
+        const result = await getGroupPosts(groupId, {
+            limit: GROUP_POSTS_PAGE_SIZE,
+            offset: append ? groupPostsOffset.value : 0,
+        })
+        const nextPosts = result?.posts || []
+        groupPosts.value = append ? [...groupPosts.value, ...nextPosts] : nextPosts
+        hasMorePosts.value = result?.hasMore === true
+        groupPostsOffset.value = typeof result?.nextOffset === 'number'
+            ? result.nextOffset
+            : groupPostsOffset.value + nextPosts.length
+    } finally {
+        loadingMorePosts.value = false
+    }
+}
+
+// infinite scroll for group posts
+function observePostsEnd() {
+    if (!postsSentinel.value || typeof IntersectionObserver === 'undefined') return
+
+    postsObserver = new IntersectionObserver(([entry]) => {
+        if (entry.isIntersecting && activeSection.value === 'posts' && hasMorePosts.value) {
+            loadGroupPosts(true)
+        }
+    }, { rootMargin: '0px 0px 320px' })
+
+    postsObserver.observe(postsSentinel.value)
+}
 
 async function deleteGroup() {
     if (isDeletingGroup.value || !window.confirm('Delete this group and all of its content?')) return
@@ -75,10 +123,13 @@ async function deleteGroup() {
 
 function addGroupPost(post) {
     groupPosts.value.unshift(post)
+    // the new post pushed everything down by one, so the next page starts one later
+    groupPostsOffset.value += 1
 }
 
 function removeGroupPost(postId) {
     groupPosts.value = groupPosts.value.filter((post) => post.id !== postId)
+    groupPostsOffset.value = Math.max(0, groupPostsOffset.value - 1)
 }
 
 async function toggleJoinRequest() {
@@ -246,7 +297,7 @@ async function toggleJoinRequest() {
                                 <p class="orbit-meta">Conversation</p>
                                 <h2 id="group-posts-heading">Group posts</h2>
                             </div>
-                            <span>{{ groupPosts.length }} {{ groupPosts.length === 1 ? 'post' : 'posts' }}</span>
+                            <span>{{ groupPosts.length }}{{ hasMorePosts ? '+' : '' }} {{ groupPosts.length === 1 ? 'post' : 'posts' }}</span>
                         </div>
                         <GroupPostComposer :group-id="groupId" @post-created="addGroupPost" />
                         <div v-if="groupPosts.length" class="group-posts">
@@ -259,6 +310,8 @@ async function toggleJoinRequest() {
                             />
                         </div>
                         <p v-else class="group-feed__state">No posts yet. Start the group conversation.</p>
+                        <div ref="postsSentinel" aria-hidden="true"></div>
+                        <p v-if="loadingMorePosts" class="group-feed__state" role="status">Loading more posts...</p>
                     </section>
                 </div>
             </template>

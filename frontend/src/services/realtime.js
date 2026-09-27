@@ -7,7 +7,11 @@ let socket = null
 let reconnectTimer = null
 let reconnectAttempt = 0
 let reconnectEnabled = false
-let lastMessageNotification = 0
+// last time we showed a "new message" popup for each chat.
+// it has to live outside the message handler, if not it resets every time
+// and the 30 second limit never works
+const lastMessageNotifications = new Map()
+const MESSAGE_POPUP_GAP = 30000
 
 function realtimeURL() {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -55,19 +59,17 @@ export function connectRealtime() {
     try {
       const event = JSON.parse(rawEvent.data)
       if (!event?.type) return
-      console.log(event)
-      const lastMessageNotifications = new Map()
-
       if (
         event.type === 'notification' &&
         event.notification.category === 'messages'
       ) {
-        const relatedID = event.notification.relatedID
+        // relatedId is the chat id, so each chat gets its own 30 second limit
+        const chatID = event.notification.relatedId
         const now = Date.now()
-        const lastNotification = lastMessageNotifications.get(relatedID) || 0
+        const lastNotification = lastMessageNotifications.get(chatID) || 0
 
-        if (now - lastNotification >= 30000) {
-          lastMessageNotifications.set(relatedID, now)
+        if (now - lastNotification >= MESSAGE_POPUP_GAP) {
+          lastMessageNotifications.set(chatID, now)
           addNotification(event.notification.message)
         }
       }

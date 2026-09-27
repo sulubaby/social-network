@@ -189,6 +189,60 @@ func TestFeedCanLoadOnePageAtATime(t *testing.T) {
 	}
 }
 
+func TestProfilePostsFollowPrivacyAndPaging(t *testing.T) {
+	db := newPostTestDatabase(t)
+	insertPostTestUser(t, db, 1, "author")
+	insertPostTestUser(t, db, 2, "follower")
+	insertPostTestUser(t, db, 3, "outsider")
+	if _, err := db.Exec(`INSERT INTO profile (user_id) VALUES (1), (2), (3)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO user_followers (follower_id, target_id, status) VALUES (2, 1, 1)`); err != nil {
+		t.Fatal(err)
+	}
+
+	createTestPost(t, db, models.CreatePostRequest{Content: "public one", Privacy: models.PostPrivacyPublic})
+	createTestPost(t, db, models.CreatePostRequest{Content: "followers one", Privacy: models.PostPrivacyFollowers})
+	createTestPost(t, db, models.CreatePostRequest{Content: "public two", Privacy: models.PostPrivacyPublic})
+
+	count := func(viewerID, limit, offset int) int {
+		t.Helper()
+		posts, err := ListProfilePosts(db, viewerID, 1, limit, offset)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, post := range posts {
+			if post.UserID != 1 {
+				t.Fatalf("profile of user 1 returned a post from user %d", post.UserID)
+			}
+		}
+		return len(posts)
+	}
+
+	if got := count(1, 10, 0); got != 3 {
+		t.Fatalf("author sees %d of their own posts, expected 3", got)
+	}
+	if got := count(2, 10, 0); got != 3 {
+		t.Fatalf("follower sees %d posts, expected 3", got)
+	}
+	if got := count(3, 10, 0); got != 2 {
+		t.Fatalf("outsider sees %d posts, expected only the 2 public ones", got)
+	}
+	if got := count(2, 2, 2); got != 1 {
+		t.Fatalf("second page has %d posts, expected 1", got)
+	}
+
+	if _, err := db.Exec(`UPDATE profile SET is_private = 1 WHERE user_id = 1`); err != nil {
+		t.Fatal(err)
+	}
+	if got := count(3, 10, 0); got != 0 {
+		t.Fatalf("outsider sees %d posts on a private profile, expected 0", got)
+	}
+	if got := count(2, 10, 0); got != 3 {
+		t.Fatalf("follower sees %d posts on a private profile, expected 3", got)
+	}
+}
+
 func createTestPost(t *testing.T, db *sql.DB, request models.CreatePostRequest) {
 	t.Helper()
 	if _, err := CreatePost(db, 1, request); err != nil {
@@ -258,6 +312,7 @@ func newPostTestDatabase(t *testing.T) *sql.DB {
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			group_id INTEGER,
 			privacy TEXT NOT NULL DEFAULT 'public',
+			location TEXT,
 			like_count INTEGER NOT NULL DEFAULT 0,
 			dislike_count INTEGER NOT NULL DEFAULT 0,
 			comment_count INTEGER NOT NULL DEFAULT 0,
@@ -277,6 +332,7 @@ func newPostTestDatabase(t *testing.T) *sql.DB {
 		CREATE TABLE profile (
 			user_id INTEGER PRIMARY KEY,
 			avatar_path TEXT,
+			is_private INTEGER NOT NULL DEFAULT 0,
 			FOREIGN KEY (user_id) REFERENCES user(id)
 		);
 

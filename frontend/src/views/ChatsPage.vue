@@ -167,6 +167,12 @@ async function selectChat(chat) {
     return
   }
 
+  // clicking the chat that is already open should not load it again,
+  // new messages already come in live through the websocket
+  if (Number(activeChat.value?.id) === Number(chat.id) && messages.value.length) {
+    return
+  }
+
   activeChat.value = chat
   loadingMessages.value = true
   error.value = ''

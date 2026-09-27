@@ -1,4 +1,3 @@
-```vue
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { createPost } from '@/api/posts/posts.js'
@@ -430,6 +429,7 @@ watch(postVisibility, (value) => {
 
 <style scoped>
 .post-composer {
+  position: sticky;
   top: 4rem;
   z-index: 15;
   align-self: start;
@@ -860,4 +860,3 @@ textarea::placeholder {
   }
 }
 </style>
-```

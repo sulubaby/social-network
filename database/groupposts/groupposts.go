@@ -60,12 +60,20 @@ func CreatePost(db *sql.DB, groupID int64, userID int, content, imagePath string
 	return getPost(db, groupID, postID)
 }
 
-// ListPosts gets all the posts of a group, newest first
-func ListPosts(db *sql.DB, groupID int64) ([]models.GroupPost, error) {
-	rows, err := db.Query(groupPostSelect+`
+// ListPosts gets the posts of a group, newest first.
+// pagination is optional: [limit, offset]
+func ListPosts(db *sql.DB, groupID int64, pagination ...int) ([]models.GroupPost, error) {
+	query := groupPostSelect + `
 		WHERE gp.group_id = ?
 		ORDER BY gp.created_at DESC, gp.id DESC
-	`, groupID)
+	`
+	args := []any{groupID}
+	if len(pagination) >= 2 {
+		query += ` LIMIT ? OFFSET ?`
+		args = append(args, pagination[0], pagination[1])
+	}
+
+	rows, err := db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}

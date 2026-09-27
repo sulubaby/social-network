@@ -24,8 +24,10 @@ export async function createPost(formData) {
 }
 
 // get one page of the home feed
-export async function getPosts({ limit = 20, offset = 0 } = {}) {
+export async function getPosts({ limit = 20, offset = 0, userId = null } = {}) {
     const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+    // with a userId we get that persons posts for their profile page
+    if (userId) params.set('userID', String(userId))
     const response = await fetch(`/api/posts?${params}`, {
         method: 'GET',
         credentials: 'include',

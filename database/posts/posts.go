@@ -127,7 +127,22 @@ func GetPostByID(db *sql.DB, postID int64) (models.Post, error) {
 // the author, or its selected and i am in the list.
 // liked tells the frontend if i already liked the post
 func ListFeedPosts(db *sql.DB, viewerID int, pagination ...int) ([]models.Post, error) {
-	query := `
+	query := visiblePostsQuery + `
+		ORDER BY posts.created_at DESC, posts.id DESC
+	`
+	args := []any{viewerID, viewerID, viewerID, viewerID}
+	if len(pagination) >= 2 {
+		query += ` LIMIT ? OFFSET ?`
+		args = append(args, pagination[0], pagination[1])
+	}
+
+	return queryPosts(db, query, args...)
+}
+
+// visiblePostsQuery is the SELECT for posts the viewer is allowed to see.
+// it needs the viewer id 4 times (liked, mine, followers, selected).
+// the feed and the profile page both start from this
+const visiblePostsQuery = `
 		SELECT
 			posts.id,
 			posts.user_id,
@@ -174,14 +189,10 @@ func ListFeedPosts(db *sql.DB, viewerID int, pagination ...int) ([]models.Post, 
 				)
 			)
 		)
-		ORDER BY posts.created_at DESC, posts.id DESC
-	`
-	args := []any{viewerID, viewerID, viewerID, viewerID}
-	if len(pagination) >= 2 {
-		query += ` LIMIT ? OFFSET ?`
-		args = append(args, pagination[0], pagination[1])
-	}
+`
 
+// queryPosts runs a posts query and reads every row into a Post
+func queryPosts(db *sql.DB, query string, args ...any) ([]models.Post, error) {
 	rows, err := db.Query(query, args...)
 	if err != nil {
 		return nil, err

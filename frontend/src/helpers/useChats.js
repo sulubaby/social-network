@@ -9,10 +9,14 @@ let pending = false
 let stopNotificationListener
 let stopConnectionListener
 const knownNotificationIDs = new Set()
+// same idea as useNotifications: dont reload on connect if we just loaded
+const RELOAD_GAP = 3000
+let lastRefresh = 0
 
 export async function refreshChats() {
   if (pending) return
   pending = true
+  lastRefresh = Date.now()
 
   try {
     const result = await getNotifications('messages')
@@ -39,7 +43,7 @@ export function useChatCount() {
         if (!notification.isRead) chatCount.value += 1
       })
       stopConnectionListener = subscribeRealtime('connection', event => {
-        if (event.status === 'connected') refreshChats()
+        if (event.status === 'connected' && Date.now() - lastRefresh > RELOAD_GAP) refreshChats()
       })
     }
   })

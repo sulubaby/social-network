@@ -14,22 +14,35 @@ import (
 	"strings"
 )
 
-// GetGroupPosts handles GET /api/groups/{id}/posts
+// GetGroupPosts handles GET /api/groups/{id}/posts?limit=&offset=
 func (app App) GetGroupPosts(w http.ResponseWriter, r *http.Request) {
 	userID, groupID, ok := groupRequestIdentity(w, r)
 	if !ok || !app.requireGroupMember(w, groupID, userID) {
 		return
 	}
 
-	posts, err := groupposts.ListPosts(app.DB, groupID)
+	page, err := parsePage(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"status": false, "message": "limit must be between 1 and 50 and offset cannot be negative"})
+		return
+	}
+
+	// one page at a time, one extra row tells us if there is more
+	posts, err := groupposts.ListPosts(app.DB, groupID, page.Limit+1, page.Offset)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"status": false, "message": "could not load group posts"})
 		return
 	}
+	posts, hasMore := trimPage(posts, page, true)
 	for i := range posts {
 		posts[i].IsOwner = posts[i].UserID == userID
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"status": true, "posts": posts})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":     true,
+		"posts":      posts,
+		"hasMore":    hasMore,
+		"nextOffset": page.Offset + len(posts),
+	})
 }
 
 // CreateGroupPost handles POST /api/groups/{id}/posts

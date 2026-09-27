@@ -77,6 +77,9 @@ func GetUserData(db *sql.DB, userID int) (models.UserData, error) {
 		return userData, err
 	}
 
+	// the frontend needs my id (for example to load my own posts on my profile)
+	userData.UserInfo.ID = userID
+
 	if firstName.Valid {
 		userData.UserInfo.FirstName = firstName.String
 	} else {

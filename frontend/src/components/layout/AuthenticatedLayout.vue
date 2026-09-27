@@ -5,6 +5,7 @@ import SideNavigation from './SideNavigation.vue'
 import TopNavigation from './TopNavigation.vue'
 
 import { getUserData } from '@/api/users/personalProfile.js'
+import { addNotification } from '@/data/notifications'
 
 defineProps({
   activePage: {
@@ -29,7 +30,6 @@ async function getData() {
     }
 
     user.value = result.data
-    console.log(user.value)
   } catch (err) {
     addNotification(err || 'could not get data')
   }

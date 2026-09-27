@@ -12,6 +12,10 @@ let pending = false
 let stopNotificationListener
 let stopConnectionListener
 const NOTIFICATION_PREVIEW_SIZE = 12
+// when the websocket connects we reload to catch anything we missed, but if we
+// just loaded a moment ago (normal page open) there is nothing to catch, so skip it
+const RELOAD_GAP = 3000
+let lastRefresh = 0
 
 // runs when a new notification comes from the websocket.
 // if we already have it we update it, if not we put it on top and add to the unread count
@@ -30,6 +34,7 @@ function receiveNotification(event) {
 export async function refreshNotifications() {
   if (pending) return
   pending = true
+  lastRefresh = Date.now()
   try {
     // The header and feed sidebar only need a small recent preview. The full
     // notifications screen loads the rest page by page as the user scrolls.
@@ -55,7 +60,7 @@ export function useNotifications() {
       refreshNotifications()
       stopNotificationListener = subscribeRealtime('notification', receiveNotification)
       stopConnectionListener = subscribeRealtime('connection', event => {
-        if (event.status === 'connected') refreshNotifications()
+        if (event.status === 'connected' && Date.now() - lastRefresh > RELOAD_GAP) refreshNotifications()
       })
     }
   })

@@ -1,5 +1,5 @@
 <script setup>
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
 import AuthenticatedLayout from '@/components/layout/AuthenticatedLayout.vue'
 
@@ -11,11 +11,9 @@ import PostComposer from '@/components/posts/PostComposer.vue'
 
 import { getPosts } from '@/api/posts/posts.js'
 
-import { addNotification } from '@/data/notifications'
+import { profileData } from '@/data/usersData'
 
-import { getUserData } from '@/api/users/personalProfile'
-
-// feed state: the posts, loading flags, error text and the logged in user
+// feed state: the posts, loading flags and error text
 const posts = ref([])
 
 const isLoading = ref(true)
@@ -32,7 +30,9 @@ const FEED_PAGE_SIZE = 20
 
 let feedObserver
 
-const user = ref({})
+// my avatar comes from the shared profile data. the layout already loads it,
+// so the feed doesnt need to ask the server for my data a second time
+const myAvatar = computed(() => profileData.userInfo.avatar)
 
 // colors for the avatar circle when a user has no picture
 const avatarColors = [
@@ -42,22 +42,6 @@ const avatarColors = [
   '#ffb84d',
   '#4cc3ff'
 ]
-
-// get my own user data (we need my avatar for the post box)
-async function getData() {
-  try {
-    const result = await getUserData()
-
-    if (!result.status) {
-      addNotification(result.message || 'could not get data')
-      return
-    }
-
-    user.value = { ...result.data }
-  } catch (err) {
-    addNotification(err?.message || err || 'could not get data')
-  }
-}
 
 // makes the post date easy to read. sqlite gives "2026-09-27 15:20:00" so we swap the space for a T first
 function formatPostTime(value) {
@@ -205,10 +189,9 @@ function observeFeedEnd() {
   feedObserver.observe(feedSentinel.value)
 }
 
-// when the page opens: load posts, my data, then start watching the scroll
+// when the page opens: load the first posts, then start watching the scroll
 onMounted(async () => {
   await loadPosts()
-  await getData()
   observeFeedEnd()
 })
 
@@ -227,11 +210,7 @@ onBeforeUnmount(() => {
 
         <!-- the box to write a new post -->
         <PostComposer
-          :avatar="
-            user?.UserInfo?.Avatar
-              ? `/uploads/${user.UserInfo.Avatar}`
-              : ''
-          "
+          :avatar="myAvatar ? `/uploads/${myAvatar}` : ''"
           @post-created="addPost"
         />
 

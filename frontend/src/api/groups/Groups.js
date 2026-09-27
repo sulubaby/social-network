@@ -150,8 +150,10 @@ async function groupContentRequest(url, options = {}) {
   return result;
 }
 
-export function getGroupPosts(groupID) {
-  return groupContentRequest(`/api/groups/${groupID}/posts`);
+// one page of group posts, newest first
+export function getGroupPosts(groupID, { limit = 20, offset = 0 } = {}) {
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  return groupContentRequest(`/api/groups/${groupID}/posts?${params}`);
 }
 
 export function createGroupPost(groupID, formData) {

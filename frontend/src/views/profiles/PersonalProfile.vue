@@ -4,6 +4,7 @@ import { onMounted, onUnmounted, ref } from 'vue'
 
 import { getUserData } from '@/api/users/personalProfile'
 import { getPosts } from '@/api/posts/posts.js'
+import { toProfileCardPost } from '@/helpers/profilePosts.js'
 import { profileData } from '@/data/usersData'
 
 import AuthenticatedLayout from '@/components/layout/AuthenticatedLayout.vue'
@@ -36,14 +37,16 @@ async function loadPosts(loadMore = false) {
   }
 
   try {
+    // only my own posts, 20 at a time
     const result = await getPosts({
       limit,
-      offset: offset.value
+      offset: offset.value,
+      userId: profileData.userInfo.id,
     })
 
-    console.log(result)
-
-    let newPosts = result.posts;
+    const newPosts = (result?.posts || []).map(
+      (post, index) => toProfileCardPost(post, posts.value.length + index),
+    )
 
     if (loadMore) {
       posts.value.push(...newPosts)

@@ -1,7 +1,6 @@
 package api
 
 import (
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"io"
@@ -202,7 +201,7 @@ func (app App) ListPosts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// profile page posts
+	// profile page posts (?userID=), only the ones i am allowed to see
 	queryUserID := r.URL.Query().Get("userID")
 	if queryUserID != "" {
 		requestUserID, err := strconv.Atoi(queryUserID)
@@ -214,33 +213,22 @@ func (app App) ListPosts(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		userPosts, err := posts.GetUserPosts(app.DB, requestUserID, page.Limit, page.Offset)
-		if err != nil && err != sql.ErrNoRows {
+		// ask for one extra post to know if there is a next page, same as the feed
+		userPosts, err := posts.ListProfilePosts(app.DB, userID, requestUserID, page.Limit+1, page.Offset)
+		if err != nil {
 			helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
 				"status":  false,
 				"message": "could not get posts",
 			})
 			return
 		}
-		
-		var filteredPosts []models.Post
-		// if its not my profile, hide the posts i am not allowed to see
-		if requestUserID != userID {
-			filteredPosts, err = posts.FilterPosts(app.DB, &userPosts, userID)
-			if err != nil {
-				helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
-					"status":  false,
-					"message": "could not get posts",
-				})
-				return
-			}
-		} else {
-			filteredPosts = userPosts
-		}
+		userPosts, hasMore := trimPage(userPosts, page, true)
 
 		helpers.WriteJson(w, http.StatusOK, map[string]any{
-			"status": true,
-			"data":   filteredPosts,
+			"status":     true,
+			"posts":      userPosts,
+			"hasMore":    hasMore,
+			"nextOffset": page.Offset + len(userPosts),
 		})
 		return
 	}

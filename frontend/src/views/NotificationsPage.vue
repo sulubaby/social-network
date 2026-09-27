@@ -31,6 +31,8 @@ const NOTIFICATION_PAGE_SIZE = 20
 let notificationObserver
 let stopNotificationListener
 let stopConnectionListener
+// time of the last full load, so the websocket connect doesnt load the same page again
+let lastLoadedAt = 0
 
 const activeFilter = ref('all')
 
@@ -144,6 +146,7 @@ async function loadNotifications({ append = false } = {}) {
     isLoadingMore.value = true
   } else {
     isLoading.value = true
+    lastLoadedAt = Date.now()
   }
   loadError.value = ''
 
@@ -230,7 +233,7 @@ function observeNotificationEnd() {
 onMounted(async () => {
   stopNotificationListener = subscribeRealtime('notification', receiveRealtimeNotification)
   stopConnectionListener = subscribeRealtime('connection', event => {
-    if (event.status === 'connected' && !isLoading.value) loadNotifications()
+    if (event.status === 'connected' && !isLoading.value && Date.now() - lastLoadedAt > 3000) loadNotifications()
   })
   observeNotificationEnd()
   await loadNotifications()

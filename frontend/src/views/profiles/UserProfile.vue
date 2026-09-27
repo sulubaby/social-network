@@ -1,8 +1,9 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { getProfileData } from '@/api/users/profiles'
 import { getPosts } from '@/api/posts/posts.js'
+import { toProfileCardPost } from '@/helpers/profilePosts.js'
 import { profileData } from '@/data/usersData'
 import AuthenticatedLayout from '@/components/layout/AuthenticatedLayout.vue'
 import ProfileHeader from '@/components/personalProfile/ProfileHeader.vue'
@@ -22,11 +23,69 @@ const error = ref('')
 
 const posts = ref([])
 
+// paging for this persons posts (20 at a time, more when you scroll down)
+const POSTS_PAGE_SIZE = 20
+const profileId = ref(0)
+const postsOffset = ref(0)
+const hasMore = ref(false)
+const loadingMore = ref(false)
+let throttleTimeout = null
+
+// loads one page of this persons posts. the server only sends the ones i can see
+async function loadPosts(loadMore = false) {
+  if (loadMore && (loadingMore.value || !hasMore.value)) return
+  if (loadMore) loadingMore.value = true
+
+  const id = profileId.value
+  try {
+    const result = await getPosts({
+      limit: POSTS_PAGE_SIZE,
+      offset: loadMore ? postsOffset.value : 0,
+      userId: id,
+    })
+    // if i opened another profile while this was loading, drop the old answer
+    if (id !== profileId.value) return
+
+    const newPosts = (result?.posts || []).map(
+      (post, index) => toProfileCardPost(post, (loadMore ? posts.value.length : 0) + index),
+    )
+    posts.value = loadMore ? [...posts.value, ...newPosts] : newPosts
+    hasMore.value = result?.hasMore === true
+    postsOffset.value = typeof result?.nextOffset === 'number'
+      ? result.nextOffset
+      : postsOffset.value + newPosts.length
+  } finally {
+    if (loadMore) loadingMore.value = false
+  }
+}
+
+// throttled scroll: check at most every 200ms if we are near the bottom
+function handleScroll() {
+  if (throttleTimeout) return
+
+  throttleTimeout = setTimeout(() => {
+    throttleTimeout = null
+    const nearBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 500
+    if (nearBottom && activeTab.value === 'posts') loadPosts(true)
+  }, 200)
+}
+
+onMounted(() => window.addEventListener('scroll', handleScroll, { passive: true }))
+
+onUnmounted(() => {
+  window.removeEventListener('scroll', handleScroll)
+  clearTimeout(throttleTimeout)
+  throttleTimeout = null
+})
+
 async function loadProfile(idValue) {
   const id = Number(idValue)
 
   activeTab.value = 'posts'
   posts.value = []
+  hasMore.value = false
+  postsOffset.value = 0
+  profileId.value = id
   error.value = ''
 
   if (!Number.isInteger(id) || id <= 0) {
@@ -39,13 +98,10 @@ async function loadProfile(idValue) {
 
   try {
     const profileResult = await getProfileData(id, 10)
-    console.log(profileData)
     if (!profileResult) return
 
     if (profileResult.showProfile) {
-      const postResult = await getPosts()
-      posts.value = postResult.posts;
-      
+      await loadPosts()
     }
   } catch (err) {
     console.error(err)
@@ -57,6 +113,9 @@ async function loadProfile(idValue) {
 
 function relationshipChanged(status) {
   profileData.isFollowing = status
+
+  // once i follow them i may see more posts (followers only ones), so reload the first page
+  if (status === 1) loadPosts()
 
   if (profileData.userInfo.isPrivate === 1 && status !== 1) {
     profileData.show = false
@@ -136,6 +195,10 @@ watch(() => route.query.id, loadProfile, { immediate: true })
               />
             </div>
 
+            <p v-if="loadingMore" class="profile-loading">
+              Loading more posts...
+            </p>
+
             <p
               v-else
               class="profile-empty orbit-surface"
@@ -172,6 +235,13 @@ watch(() => route.query.id, loadProfile, { immediate: true })
 </template>
 
 <style scoped>
+.profile-loading {
+  margin: var(--space-5) 0;
+  padding: var(--space-4);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
 .profile-page {
   display: grid;
   width: 100%;
