@@ -429,10 +429,6 @@ watch(postVisibility, (value) => {
 
 <style scoped>
 .post-composer {
-  position: sticky;
-  top: 4rem;
-  z-index: 15;
-  align-self: start;
   width: 100%;
   max-height: calc(100vh - 8.5rem);
   max-height: calc(100dvh - 8.5rem);

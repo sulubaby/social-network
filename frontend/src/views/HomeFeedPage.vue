@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import AuthenticatedLayout from '@/components/layout/AuthenticatedLayout.vue'
 
@@ -157,7 +157,32 @@ function addPost(post) {
   posts.value.unshift(
     toCardPost(post, 0)
   )
+  // the post is published, close the popup
+  showComposer.value = false
 }
+
+// the + button opens the post box in a popup instead of keeping it on the page
+const showComposer = ref(false)
+
+function closeComposer() {
+  showComposer.value = false
+}
+
+// escape closes the popup
+function handleComposerKeydown(event) {
+  if (event.key === 'Escape') closeComposer()
+}
+
+// when the popup opens, put the cursor in the text box and listen for escape
+watch(showComposer, async (open) => {
+  if (open) {
+    window.addEventListener('keydown', handleComposerKeydown)
+    await nextTick()
+    document.getElementById('post-content')?.focus()
+  } else {
+    window.removeEventListener('keydown', handleComposerKeydown)
+  }
+})
 
 // infinite scroll: load more when the bottom of the feed is close to the screen
 function observeFeedEnd() {
@@ -197,6 +222,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   feedObserver?.disconnect()
+  window.removeEventListener('keydown', handleComposerKeydown)
 })
 </script>
 
@@ -208,11 +234,6 @@ onBeforeUnmount(() => {
           Home feed
         </h1>
 
-        <!-- the box to write a new post -->
-        <PostComposer
-          :avatar="myAvatar ? `/uploads/${myAvatar}` : ''"
-          @post-created="addPost"
-        />
 
         <!-- loading / error / no posts / the list of posts -->
         <p
@@ -279,10 +300,136 @@ onBeforeUnmount(() => {
       <!-- right side panel -->
       <FeedSidebar />
     </div>
+
+    <!-- floating + button on the right to write a new post -->
+    <button
+      class="new-post-button"
+      type="button"
+      aria-label="Create a post"
+      title="Create a post"
+      @click="showComposer = true"
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 5v14M5 12h14" />
+      </svg>
+    </button>
+
+    <!-- the post box popup. clicking outside or pressing escape closes it -->
+    <Teleport to="body">
+      <div
+        v-if="showComposer"
+        class="composer-popup"
+        @click.self="closeComposer"
+      >
+        <div
+          class="composer-popup__box"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Create a post"
+        >
+          <button
+            class="composer-popup__close"
+            type="button"
+            aria-label="Close"
+            @click="closeComposer"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m6 6 12 12M18 6 6 18" />
+            </svg>
+          </button>
+
+          <PostComposer
+            :avatar="myAvatar ? `/uploads/${myAvatar}` : ''"
+            @post-created="addPost"
+          />
+        </div>
+      </div>
+    </Teleport>
   </AuthenticatedLayout>
 </template>
 
 <style scoped>
+.new-post-button {
+  position: fixed;
+  right: 1.25rem;
+  /* stay above the bottom menu on phones */
+  bottom: calc(4.25rem + 1rem);
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  border: 0;
+  border-radius: 50%;
+  background: var(--gradient-action);
+  box-shadow: 0 0.75rem 1.75rem rgb(0 0 0 / 30%);
+  color: white;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.new-post-button:hover {
+  transform: scale(1.06);
+}
+
+.new-post-button:focus-visible {
+  outline: 2px solid white;
+  outline-offset: 3px;
+}
+
+.new-post-button svg,
+.composer-popup__close svg {
+  width: 1.6rem;
+  height: 1.6rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+}
+
+.composer-popup {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: rgb(0 0 0 / 60%);
+}
+
+.composer-popup__box {
+  position: relative;
+  width: min(40rem, 100%);
+}
+
+.composer-popup__close {
+  position: absolute;
+  top: -0.75rem;
+  right: -0.75rem;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.composer-popup__close svg {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+@media (min-width: 64rem) {
+  .new-post-button {
+    right: 2rem;
+    bottom: 2rem;
+  }
+}
+
 .feed-layout {
   display: flex;
   align-items: flex-start;
