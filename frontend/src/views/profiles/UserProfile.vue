@@ -180,8 +180,8 @@ watch(() => route.query.id, loadProfile, { immediate: true })
             aria-labelledby="member-posts-heading"
           >
             <header class="profile-posts-header">
-              <p class="orbit-meta">Activity</p>
               <h2 id="member-posts-heading">Posts</h2>
+              <span>{{ profileData.numOfPosts }} {{ profileData.numOfPosts === 1 ? 'post' : 'posts' }}</span>
             </header>
 
             <div
@@ -277,35 +277,48 @@ watch(() => route.query.id, loadProfile, { immediate: true })
   font-weight: 700;
 }
 
+/* same width as the home feed column */
 .profile-posts {
   display: grid;
   width: 100%;
-  max-width: 64rem;
+  max-width: 48rem;
   margin-inline: auto;
   gap: var(--space-4);
 }
 
+/* the posts title is a slim bar that sticks right under the tabs bar,
+   so it always has room and never slides under the tabs */
 .profile-posts-header {
-  margin-bottom: var(--space-1);
+  position: sticky;
+  top: calc(4rem + var(--touch-target) + 1px);
+  z-index: 9;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-4);
+  padding: var(--space-6) 0 var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-background);
 }
 
-.profile-posts .orbit-meta {
+.profile-posts-header h2 {
   margin: 0;
-  color: var(--color-violet-soft);
-}
-
-.profile-posts h2 {
-  margin: var(--space-1) 0 0;
   font-family: var(--font-display);
-  font-size: 1.5rem;
+  font-size: 1.35rem;
   letter-spacing: 0;
 }
 
+.profile-posts-header span {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
+
+/* one post per row, same width as the home feed */
 .posts-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
-  width: 100%;
 }
 
 .posts-grid :deep(.post-card) {
@@ -320,15 +333,5 @@ watch(() => route.query.id, loadProfile, { immediate: true })
   text-align: center;
 }
 
-@media (max-width: 900px) {
-  .posts-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
 
-@media (max-width: 600px) {
-  .posts-grid {
-    grid-template-columns: 1fr;
-  }
-}
 </style>
