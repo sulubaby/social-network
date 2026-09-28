@@ -1,14 +1,17 @@
 <script setup>
 
-import { ref, nextTick, watch } from 'vue'
+import { onBeforeUnmount, ref, nextTick, watch } from 'vue'
 
 import IconGlyph from '@/components/layout/IconGlyph.vue'
+import { stopChatTyping, updateChatTyping } from '@/services/realtime.js'
 
 const props = defineProps({
   sending: {
     type: Boolean,
     default: false
-  }
+  },
+  chatId: { type: [String, Number], default: null },
+  active: { type: Boolean, default: true },
 })
 
 const emit = defineEmits(['send'])
@@ -29,11 +32,26 @@ const emojis = [
 function submit() {
   if (!content.value.trim()) return
 
+  stopChatTyping(props.chatId)
   emit('send', content.value, () => {
     content.value = ''
     focusAfterSend = true
   })
 }
+
+function handleInput() {
+  if (props.active) updateChatTyping(props.chatId, content.value)
+}
+
+watch(() => props.chatId, (chatId, previousChatId) => {
+  if (previousChatId && Number(previousChatId) !== Number(chatId)) stopChatTyping(previousChatId)
+})
+
+watch(() => props.active, active => {
+  if (!active) stopChatTyping(props.chatId)
+})
+
+onBeforeUnmount(() => stopChatTyping(props.chatId))
 
 watch(() => props.sending, async sending => {
   if (sending || !focusAfterSend) return
@@ -66,6 +84,8 @@ async function addEmoji(emoji) {
     emoji +
     content.value.substring(end)
 
+  if (props.active) updateChatTyping(props.chatId, content.value)
+
   showEmojiPicker.value = false
 
   await nextTick()
@@ -89,7 +109,7 @@ async function addEmoji(emoji) {
     <div class="message-input">
 
       <textarea id="chat-message" ref="textarea" v-model="content" rows="2" maxlength="2000"
-        placeholder="Write a message..." :disabled="sending" @keydown="handleKeydown" />
+        placeholder="Write a message..." :disabled="sending" @input="handleInput" @keydown="handleKeydown" />
 
       <div class="composer-actions">
 

@@ -21,6 +21,7 @@ import { sendChatMessage, subscribeRealtime } from '@/services/realtime.js'
 import { refreshChats } from '@/helpers/useChats.js'
 import { refreshNotifications } from '@/helpers/useNotifications.js'
 import { markNotificationRead } from '@/api/notifications.js'
+import { useChatTyping } from '@/helpers/useChatTyping.js'
 
 const conversations = ref([])
 const candidates = ref([])
@@ -35,6 +36,8 @@ const hasOlderMessages = ref(false)
 const messageOffset = ref(0)
 const openingUserId = ref(null)
 const error = ref('')
+const activeChatId = computed(() => activeChat.value?.id ?? null)
+const { typingCount } = useChatTyping(activeChatId)
 
 const MESSAGE_PAGE_SIZE = 20
 
@@ -375,8 +378,8 @@ function shortTime(value) {
                 'orbit member' }}</small></span>
             </header>
             <MessageThread :messages="messages" :loading="loadingMessages" :loading-older="loadingOlderMessages"
-              :can-load-older="hasOlderMessages" @reach-top="loadOlderMessages" />
-            <MessageComposer :sending="sending" @send="send" />
+              :can-load-older="hasOlderMessages" :typing-count="typingCount" @reach-top="loadOlderMessages" />
+            <MessageComposer :sending="sending" :chat-id="activeChat.id" @send="send" />
           </template>
           <div v-else class="thread-placeholder">
             <IconGlyph name="chat" :size="28" />

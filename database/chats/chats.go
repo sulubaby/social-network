@@ -297,6 +297,13 @@ func GetChatParticipants(db *sql.DB, chatID int64) ([]int, error) {
 	return participants, rows.Err()
 }
 
+func GetAuthorizedChatParticipants(db *sql.DB, chatID int64, userID int) ([]int, error) {
+	if _, err := requireChatAccess(db, chatID, userID); err != nil {
+		return nil, err
+	}
+	return GetChatParticipants(db, chatID)
+}
+
 func EnsureGroupChat(db *sql.DB, groupID int64, userID int) (int64, error) {
 	tx, err := db.Begin()
 	if err != nil {

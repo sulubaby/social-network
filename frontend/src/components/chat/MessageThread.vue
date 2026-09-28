@@ -7,6 +7,7 @@ const props = defineProps({
   loadingOlder: { type: Boolean, default: false },
   canLoadOlder: { type: Boolean, default: false },
   autoScroll: { type: Boolean, default: true },
+  typingCount: { type: Number, default: 0 },
   emptyMessage: { type: String, default: 'No messages yet. Say hello.' },
 })
 const emit = defineEmits(['reach-top'])
@@ -56,6 +57,12 @@ watch(() => props.loadingOlder, (loading, wasLoading) => {
   if (wasLoading && !loading && props.messages[0]?.id === firstMessageIdBeforeOlderLoad) {
     preserveOlderScroll = false
   }
+}, { flush: 'post' })
+
+watch(() => props.typingCount, async (typingCount, previousTypingCount) => {
+  if (typingCount <= 0 || previousTypingCount > 0 || !isNearBottom) return
+  await nextTick()
+  if (thread.value) thread.value.scrollTop = thread.value.scrollHeight
 }, { flush: 'post' })
 
 async function scrollToBottom() {
@@ -112,6 +119,9 @@ function messageTime(value) {
         <time :datetime="message.createdAt">{{ messageTime(message.createdAt) }}</time>
       </div>
     </article>
+    <div v-if="typingCount > 0" class="typing-indicator" role="status" aria-label="Someone is typing">
+      <span></span><span></span><span></span>
+    </div>
   </div>
 </template>
 
@@ -129,5 +139,11 @@ function messageTime(value) {
 .message-row--own .message-content p { border-color: rgb(var(--rgb-mint) / 28%); border-radius: var(--radius-medium) var(--radius-medium) var(--radius-small) var(--radius-medium); background: var(--color-surface-teal); color: var(--color-text); }
 .message-content time { color: var(--color-text-faint); font-family: var(--font-meta); font-size: .6875rem; }
 .message-row--own time { text-align: right; }
+.typing-indicator { display: inline-flex; width: 3.25rem; min-height: 2.25rem; align-items: center; justify-content: center; gap: .3rem; padding: 0 var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-medium) var(--radius-medium) var(--radius-medium) var(--radius-small); background: var(--color-surface); }
+.typing-indicator span { width: .4rem; height: .4rem; border-radius: 50%; background: var(--color-text-muted); animation: typing-dot 1.2s infinite ease-in-out; }
+.typing-indicator span:nth-child(2) { animation-delay: .15s; }
+.typing-indicator span:nth-child(3) { animation-delay: .3s; }
+@keyframes typing-dot { 0%, 60%, 100% { opacity: .35; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-.2rem); } }
+@media (prefers-reduced-motion: reduce) { .typing-indicator span { animation: none; opacity: .75; } }
 @media (max-width: 520px) { .message-thread { min-height: 18rem; padding: var(--space-4); } .message-row { max-width: 92%; } }
 </style>
