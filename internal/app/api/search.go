@@ -189,7 +189,20 @@ func searchPosts(db *sql.DB, currentUserID int, pattern string) ([]map[string]an
 		WHERE (posts.content LIKE ? OR users.username LIKE ? OR users.first_name LIKE ? OR users.last_name LIKE ?)
 		  AND (
 			posts.user_id = ?
-			OR posts.privacy = 'public'
+			OR (
+				posts.privacy = 'public'
+				-- a private account's posts are only for its followers, even the public ones
+				AND (
+					NOT EXISTS (
+						SELECT 1 FROM profile AS author_profile
+						WHERE author_profile.user_id = posts.user_id AND author_profile.is_private = 1
+					)
+					OR EXISTS (
+						SELECT 1 FROM user_followers AS public_follows
+						WHERE public_follows.follower_id = ? AND public_follows.target_id = posts.user_id AND public_follows.status = 1
+					)
+				)
+			)
 			OR (
 				posts.privacy = 'followers'
 				AND EXISTS (
@@ -207,7 +220,7 @@ func searchPosts(db *sql.DB, currentUserID int, pattern string) ([]map[string]an
 		  )
 		ORDER BY posts.created_at DESC, posts.id DESC
 		LIMIT 12
-	`, pattern, pattern, pattern, pattern, currentUserID, currentUserID, currentUserID)
+	`, pattern, pattern, pattern, pattern, currentUserID, currentUserID, currentUserID, currentUserID)
 	if err != nil {
 		return nil, err
 	}

@@ -130,7 +130,7 @@ func ListFeedPosts(db *sql.DB, viewerID int, pagination ...int) ([]models.Post, 
 	query := visiblePostsQuery + `
 		ORDER BY posts.created_at DESC, posts.id DESC
 	`
-	args := []any{viewerID, viewerID, viewerID, viewerID}
+	args := []any{viewerID, viewerID, viewerID, viewerID, viewerID}
 	if len(pagination) >= 2 {
 		query += ` LIMIT ? OFFSET ?`
 		args = append(args, pagination[0], pagination[1])
@@ -140,7 +140,7 @@ func ListFeedPosts(db *sql.DB, viewerID int, pagination ...int) ([]models.Post, 
 }
 
 // visiblePostsQuery is the SELECT for posts the viewer is allowed to see.
-// it needs the viewer id 4 times (liked, mine, followers, selected).
+// it needs the viewer id 5 times (liked, mine, public, followers, selected).
 // the feed and the profile page both start from this
 const visiblePostsQuery = `
 		SELECT
@@ -168,7 +168,20 @@ const visiblePostsQuery = `
 		WHERE posts.group_id IS NULL
 		AND (
 			posts.user_id = ?
-			OR posts.privacy = 'public'
+			OR (
+				posts.privacy = 'public'
+				-- a private account's posts are only for its followers, even the public ones
+				AND (
+					NOT EXISTS (
+						SELECT 1 FROM profile AS author_profile
+						WHERE author_profile.user_id = posts.user_id AND author_profile.is_private = 1
+					)
+					OR EXISTS (
+						SELECT 1 FROM user_followers AS public_follows
+						WHERE public_follows.follower_id = ? AND public_follows.target_id = posts.user_id AND public_follows.status = 1
+					)
+				)
+			)
 			OR (
 				posts.privacy = 'followers'
 				AND EXISTS (

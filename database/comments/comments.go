@@ -124,7 +124,20 @@ func CanViewPost(db *sql.DB, viewerID int, postID int64) (bool, error) {
 			AND posts.group_id IS NULL
 			AND (
 				posts.user_id = ?
-				OR posts.privacy = 'public'
+				OR (
+					posts.privacy = 'public'
+					-- a private account's posts are only for its followers, even the public ones
+					AND (
+						NOT EXISTS (
+							SELECT 1 FROM profile AS author_profile
+							WHERE author_profile.user_id = posts.user_id AND author_profile.is_private = 1
+						)
+						OR EXISTS (
+							SELECT 1 FROM user_followers AS public_follows
+							WHERE public_follows.follower_id = ? AND public_follows.target_id = posts.user_id AND public_follows.status = 1
+						)
+					)
+				)
 				OR (
 					posts.privacy = 'followers'
 					AND EXISTS (
@@ -146,7 +159,7 @@ func CanViewPost(db *sql.DB, viewerID int, postID int64) (bool, error) {
 				)
 			)
 		)
-	`, postID, viewerID, viewerID, viewerID).Scan(&canView)
+	`, postID, viewerID, viewerID, viewerID, viewerID).Scan(&canView)
 
 	return canView, err
 }

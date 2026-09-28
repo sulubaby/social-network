@@ -47,7 +47,7 @@ func ListProfilePosts(db *sql.DB, viewerID, authorID, limit, offset int) ([]mode
 	`
 
 	return queryPosts(db, query,
-		viewerID, viewerID, viewerID, viewerID,
+		viewerID, viewerID, viewerID, viewerID, viewerID,
 		authorID,
 		viewerID, viewerID,
 		limit, offset,
