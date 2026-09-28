@@ -33,6 +33,12 @@ type realtimeEvent struct {
 	Code         string               `json:"code,omitempty"`
 }
 
+type realtimeTypingEvent struct {
+	Type   string `json:"type"`
+	ChatID int64  `json:"chatId"`
+	UserID int    `json:"userId"`
+}
+
 type realtimeErrorEvent struct {
 	Type    string `json:"type"`
 	Code    string `json:"code"`
@@ -84,15 +90,22 @@ func (app *App) handleRealtimeEvent(client *realtime.Client, payload []byte) {
 		return
 	}
 
-	if event.Type != "message" {
-		app.sendRealtimeError(client, "unsupported_type", "Unsupported realtime event type.")
-		return
-	}
 	if event.ChatID <= 0 {
 		app.sendRealtimeError(client, "invalid_chat", "A valid chat is required.")
 		return
 	}
 
+	switch event.Type {
+	case "message":
+		app.handleRealtimeMessage(client, event)
+	case "typing_start", "typing_stop":
+		app.handleRealtimeTyping(client, event)
+	default:
+		app.sendRealtimeError(client, "unsupported_type", "Unsupported realtime event type.")
+	}
+}
+
+func (app *App) handleRealtimeMessage(client *realtime.Client, event incomingRealtimeEvent) {
 	message, err := chatsdb.SendMessage(app.DB, event.ChatID, client.UserID, event.Content)
 	if err != nil {
 		code, safeMessage := realtimeChatError(err)
@@ -117,6 +130,33 @@ func (app *App) handleRealtimeEvent(client *realtime.Client, payload []byte) {
 	}
 
 	app.notifyPrivateMessage(event.ChatID, client.UserID, message)
+}
+
+func (app *App) handleRealtimeTyping(client *realtime.Client, event incomingRealtimeEvent) {
+	participants, err := chatsdb.GetAuthorizedChatParticipants(app.DB, event.ChatID, client.UserID)
+	if err != nil {
+		code, safeMessage := realtimeChatError(err)
+		app.sendRealtimeError(client, code, safeMessage)
+		return
+	}
+
+	recipients := make([]int, 0, len(participants))
+	for _, participantID := range participants {
+		if participantID != client.UserID {
+			recipients = append(recipients, participantID)
+		}
+	}
+
+	err = app.Realtime.SendToUsers(recipients, func(int) any {
+		return realtimeTypingEvent{
+			Type:   event.Type,
+			ChatID: event.ChatID,
+			UserID: client.UserID,
+		}
+	})
+	if err != nil {
+		log.Printf("marshal realtime typing event: %v", err)
+	}
 }
 
 func (app *App) sendRealtimeError(client *realtime.Client, code, message string) {

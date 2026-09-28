@@ -12,6 +12,9 @@ let reconnectEnabled = false
 // and the 30 second limit never works
 const lastMessageNotifications = new Map()
 const MESSAGE_POPUP_GAP = 30000
+const TYPING_IDLE_DELAY = 1600
+const TYPING_REFRESH_DELAY = 2000
+const outgoingTyping = new Map()
 
 function realtimeURL() {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -26,6 +29,19 @@ function dispatch(type, event) {
       console.error('Realtime listener failed:', error)
     }
   }
+}
+
+function sendTypingEvent(type, chatId) {
+  if (!socket || socket.readyState !== WebSocket.OPEN) return false
+  socket.send(JSON.stringify({ type, chat_id: Number(chatId) }))
+  return true
+}
+
+function clearOutgoingTyping() {
+  for (const state of outgoingTyping.values()) {
+    window.clearTimeout(state.idleTimer)
+  }
+  outgoingTyping.clear()
 }
 
 function scheduleReconnect() {
@@ -86,6 +102,7 @@ export function connectRealtime() {
   connection.addEventListener('close', () => {
     if (socket !== connection) return
     socket = null
+    clearOutgoingTyping()
     status.value = 'disconnected'
     dispatch('connection', { status: 'disconnected' })
     scheduleReconnect()
@@ -107,6 +124,7 @@ export function disconnectRealtime() {
   }
   const current = socket
   socket = null
+  clearOutgoingTyping()
   status.value = 'disconnected'
   listeners.clear()
   current?.close(1000, 'logout')
@@ -143,6 +161,36 @@ export function sendChatMessage(chatId, content) {
     chat_id: Number(chatId),
     content: normalizedContent,
   }))
+}
+
+export function updateChatTyping(chatId, content) {
+  const normalizedChatId = Number(chatId)
+  if (!Number.isInteger(normalizedChatId) || normalizedChatId <= 0) return
+
+  if (!content.trim()) {
+    stopChatTyping(normalizedChatId)
+    return
+  }
+
+  const now = Date.now()
+  const state = outgoingTyping.get(normalizedChatId) || { idleTimer: null, lastStartAt: 0 }
+  if (!state.lastStartAt || now - state.lastStartAt >= TYPING_REFRESH_DELAY) {
+    if (sendTypingEvent('typing_start', normalizedChatId)) state.lastStartAt = now
+  }
+
+  window.clearTimeout(state.idleTimer)
+  state.idleTimer = window.setTimeout(() => stopChatTyping(normalizedChatId), TYPING_IDLE_DELAY)
+  outgoingTyping.set(normalizedChatId, state)
+}
+
+export function stopChatTyping(chatId) {
+  const normalizedChatId = Number(chatId)
+  const state = outgoingTyping.get(normalizedChatId)
+  if (!state) return
+
+  window.clearTimeout(state.idleTimer)
+  outgoingTyping.delete(normalizedChatId)
+  if (state.lastStartAt) sendTypingEvent('typing_stop', normalizedChatId)
 }
 
 export const realtimeStatus = readonly(status)

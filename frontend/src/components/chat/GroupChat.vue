@@ -4,6 +4,7 @@ import { getGroupMessages } from '@/api/chats.js'
 import IconGlyph from '@/components/layout/IconGlyph.vue'
 import { appendUniqueMessage, normalizeChatMessage, normalizeChatMessages } from '@/helpers/chatMessages.js'
 import { sendChatMessage, subscribeRealtime } from '@/services/realtime.js'
+import { useChatTyping } from '@/helpers/useChatTyping.js'
 import MessageComposer from './MessageComposer.vue'
 import MessageThread from './MessageThread.vue'
 
@@ -19,6 +20,7 @@ const hasOlderMessages = ref(false)
 const messageOffset = ref(0)
 const error = ref('')
 const chatId = ref(null)
+const { typingCount } = useChatTyping(chatId)
 const messageThread = ref(null)
 const MESSAGE_PAGE_SIZE = 20
 let stopMessageListener
@@ -137,10 +139,11 @@ function send(content, clear) {
       :loading="loading"
       :loading-older="loadingOlderMessages"
       :can-load-older="hasOlderMessages"
+      :typing-count="typingCount"
       empty-message="No group messages yet. Start the conversation."
       @reach-top="loadOlderMessages"
     />
-    <MessageComposer :sending="sending" @send="send" />
+    <MessageComposer :sending="sending" :chat-id="chatId" :active="active" @send="send" />
   </section>
 </template>
 
