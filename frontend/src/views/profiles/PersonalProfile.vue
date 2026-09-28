@@ -160,8 +160,15 @@ function removePost(postID) {
         <section v-if="activeTab === 'posts'" class="profile-posts" aria-labelledby="profile-posts-heading">
 
           <header class="profile-posts__header">
-            <h2 id="profile-posts-heading">Your posts</h2>
-            <span>{{ profileData.numOfPosts }} {{ profileData.numOfPosts === 1 ? 'post' : 'posts' }}</span>
+
+            <p class="orbit-meta">
+              Activity
+            </p>
+
+            <h2 id="profile-posts-heading">
+              Your posts
+            </h2>
+
           </header>
 
           <div v-if="posts.length" class="profile-posts__grid">
@@ -240,46 +247,33 @@ function removePost(postID) {
   font-weight: 700;
 }
 
-/* same width as the home feed column */
 .profile-posts {
   width: 100%;
-  max-width: 48rem;
+  max-width: 64rem;
   margin-inline: auto;
 }
 
-/* the posts title is a slim bar that sticks right under the tabs bar,
-   so it always has room and never slides under the tabs */
 .profile-posts__header {
-  position: sticky;
-  top: calc(4rem + var(--touch-target) + 1px);
-  z-index: 9;
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-3);
-  margin: 0 0 var(--space-4);
-  padding: var(--space-6) 0 var(--space-3);
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-background);
+  margin-bottom: var(--space-4);
+}
+
+.profile-posts__header .orbit-meta {
+  margin: 0;
+  color: var(--color-violet-soft);
 }
 
 .profile-posts__header h2 {
-  margin: 0;
+  margin: var(--space-1) 0 0;
   font-family: var(--font-display);
-  font-size: 1.35rem;
+  font-size: 1.5rem;
   letter-spacing: 0;
 }
 
-.profile-posts__header span {
-  color: var(--color-text-muted);
-  font-size: 0.85rem;
-}
-
-/* one post per row, same width as the home feed */
 .profile-posts__grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--space-4);
+  align-items: start;
 }
 
 .profile-empty {
@@ -305,5 +299,19 @@ function removePost(postID) {
   opacity: 0.7;
 }
 
+@media (max-width: 60rem) {
 
+  .profile-posts__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+}
+
+@media (max-width: 40rem) {
+
+  .profile-posts__grid {
+    grid-template-columns: 1fr;
+  }
+
+}
 </style>
