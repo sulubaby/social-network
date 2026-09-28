@@ -277,10 +277,11 @@ watch(() => route.query.id, loadProfile, { immediate: true })
   font-weight: 700;
 }
 
+/* same width as the home feed column */
 .profile-posts {
   display: grid;
   width: 100%;
-  max-width: 64rem;
+  max-width: 48rem;
   margin-inline: auto;
   gap: var(--space-4);
 }
@@ -296,7 +297,7 @@ watch(() => route.query.id, loadProfile, { immediate: true })
   justify-content: space-between;
   gap: var(--space-3);
   margin: 0 0 var(--space-4);
-  padding: var(--space-4) 0 var(--space-3);
+  padding: var(--space-6) 0 var(--space-3);
   border-bottom: 1px solid var(--color-border);
   background: var(--color-background);
 }
@@ -313,68 +314,16 @@ watch(() => route.query.id, loadProfile, { immediate: true })
   font-size: 0.85rem;
 }
 
+/* one post per row, same width as the home feed */
 .posts-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
-  width: 100%;
 }
 
 .posts-grid :deep(.post-card) {
   min-width: 0;
   width: 100%;
-}
-
-/* ---- post grid on the profile ----
-   every card in a row is the same height and the like/comment bar sits at
-   the bottom. pictures go in the same 4:3 frame so a tall screenshot can't
-   stretch the whole row, and a text-only post shows its text as a tile that
-   fills the same space, so there are no empty holes */
-.posts-grid :deep(.post-card) {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-.posts-grid :deep(.post-card__media--uploaded) {
-  aspect-ratio: 4 / 3;
-  flex-shrink: 0;
-}
-
-.posts-grid :deep(.post-card__media--uploaded img) {
-  width: 100%;
-  height: 100%;
-  max-height: none;
-  object-fit: cover;
-}
-
-/* short caption above a picture: 2 lines max so picture cards stay even */
-.posts-grid :deep(.post-card:has(.post-card__media) .post-card__content) {
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-/* text-only post: the text becomes a tile that fills the card */
-.posts-grid :deep(.post-card:not(:has(.post-card__media)) .post-card__content) {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  justify-content: center;
-  min-height: 11rem;
-  padding: var(--space-5) var(--space-4);
-  border-radius: var(--radius-medium);
-  background: rgb(var(--rgb-violet) / 10%);
-  color: var(--color-text);
-  font-size: 1.05rem;
-  line-height: 1.5;
-  text-align: center;
-}
-
-.posts-grid :deep(.post-card__actions) {
-  margin-top: auto;
-  padding-top: var(--space-3);
 }
 
 .profile-empty {
@@ -384,15 +333,5 @@ watch(() => route.query.id, loadProfile, { immediate: true })
   text-align: center;
 }
 
-@media (max-width: 900px) {
-  .posts-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
 
-@media (max-width: 600px) {
-  .posts-grid {
-    grid-template-columns: 1fr;
-  }
-}
 </style>
