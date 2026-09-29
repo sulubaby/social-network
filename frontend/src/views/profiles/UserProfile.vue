@@ -153,6 +153,7 @@ watch(() => route.query.id, loadProfile, { immediate: true })
 
       <template v-else>
         <ProfileHeader
+          :email="profileData.userInfo.email"
           :first-name="profileData.userInfo.firstName"
           :last-name="profileData.userInfo.lastName"
           :username="profileData.userInfo.userName"

@@ -13,6 +13,7 @@ const props = defineProps({
   firstName: String,
   lastName: String,
   username: String,
+  email: String,
   bio: String,
   avatarPath: String,
   numOfPosts: Number,
@@ -105,10 +106,15 @@ function initials() {
               @{{ username }}
             </p>
 
+            <p v-if="email" class="profile-username">
+              Email: {{ email }}
+            </p>
+            
             <p v-if="formatDob(dob)" class="profile-dob">
               <IconGlyph name="calendar" :size="14" />
               {{ formatDob(dob) }}
             </p>
+            
           </div>
 
           <div class="profile-actions">

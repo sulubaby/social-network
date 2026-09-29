@@ -147,14 +147,14 @@ function removePost(postID) {
 
       <template v-else>
 
-        <ProfileHeader :first-name="profileData.userInfo.firstName" :last-name="profileData.userInfo.lastName"
+        <ProfileHeader :email="profileData.userInfo.email" :first-name="profileData.userInfo.firstName" :last-name="profileData.userInfo.lastName"
           :username="profileData.userInfo.userName" :bio="profileData.about.bio" :avatar-path="profileData.userInfo.avatar
             ? `/uploads/${profileData.userInfo.avatar}`
             : ''
             " :num-of-posts="profileData.numOfPosts" :num-of-following="profileData.numOfFollowing"
           :num-of-followers="profileData.numOfFollowers" :is-private="profileData.userInfo.isPrivate === 1" add-edit
           @select-tab="activeTab = $event" :dob="profileData.userInfo.dob" />
-
+        
         <ProfileTabs v-model="activeTab" type="personal" />
 
         <section v-if="activeTab === 'posts'" class="profile-posts" aria-labelledby="profile-posts-heading">

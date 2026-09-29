@@ -29,7 +29,7 @@ COPY --from=builder /go/bin/migrate /usr/local/bin/migrate
 
 COPY internal/migrations ./internal/migrations
 
-RUN mkdir -p ./db ./uploads/avatars ./uploads/posts ./uploads/groups/avatars ./uploads/comments
+RUN mkdir -p ./db ./uploads/avatars ./uploads/posts ./uploads/groups/avatars ./uploads/comments ./images/avatars
 
 EXPOSE 4000
 
