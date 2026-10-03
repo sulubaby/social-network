@@ -112,11 +112,12 @@ func (app App) CreatePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// check the text, location, privacy and selected followers before saving anything
+	// a post needs text, a picture or both. text is max 500 characters
 	request.Content = strings.TrimSpace(request.Content)
-	if request.Content == "" || len([]rune(request.Content)) > 500 {
+	if (request.Content == "" && fileErr != nil) || len([]rune(request.Content)) > 500 {
 		writeJSON(w, http.StatusBadRequest, map[string]any{
 			"status":  false,
-			"message": "post content must contain 1 to 500 characters",
+			"message": "a post needs text or an image, and text can have up to 500 characters",
 		})
 		return
 	}

@@ -123,6 +123,7 @@ function removePost(postID) {
   posts.value = posts.value.filter(
     (post) => post.id !== postID,
   )
+  profileData.numOfPosts = Math.max(0, (profileData.numOfPosts || 0) - 1)
 }
 
 </script>

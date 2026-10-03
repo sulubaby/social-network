@@ -10,7 +10,7 @@ import (
 )
 
 // we return this when someone asks for a category that doesnt exist
-var ErrInvalidCategory = errors.New("notification category must be requests, groups, events, or messages")
+var ErrInvalidCategory = errors.New("notification category must be requests, groups, events, messages, or posts")
 
 // Create saves a new notification for a user and gives back the saved row.
 // it checks the category and makes sure type and message are not empty
@@ -50,8 +50,11 @@ func List(db *sql.DB, userID int, category string, pagination ...int) ([]models.
 	query := notificationSelect + ` WHERE n.user_id = ?`
 	args := []any{userID}
 
-	// only filter by category if one was picked
-	if category != "" && category != "all" {
+	// only filter by category if one was picked.
+	// "alerts" is everything except chat messages (the bell in the top bar)
+	if category == "alerts" {
+		query += ` AND n.category <> 'messages'`
+	} else if category != "" && category != "all" {
 		if !IsCategory(category) {
 			return nil, ErrInvalidCategory
 		}
@@ -92,7 +95,7 @@ func UnreadCount(db *sql.DB, userID int, categories ...string) (int, error) {
 	if len(categories) > 0 {
 		category = categories[0]
 	}
-	if category != "" && category != "all" && !IsCategory(category) {
+	if category != "" && category != "all" && category != "alerts" && !IsCategory(category) {
 		return 0, ErrInvalidCategory
 	}
 
@@ -102,7 +105,9 @@ func UnreadCount(db *sql.DB, userID int, categories ...string) (int, error) {
 		WHERE user_id = ? AND is_read = 0
 	`
 	args := []any{userID}
-	if category != "" && category != "all" {
+	if category == "alerts" {
+		query += ` AND category <> 'messages'`
+	} else if category != "" && category != "all" {
 		query += ` AND category = ?`
 		args = append(args, category)
 	}
@@ -145,6 +150,57 @@ func MarkMessageNotificationsRead(db *sql.DB, userID int, chatID int64) error {
 		  AND related_id = ?
 	`, userID, chatID)
 	return err
+}
+
+// DeleteFromActor removes the notifications one person caused about one thing,
+// for example the "liked your post" alert after the like is taken back
+func DeleteFromActor(db *sql.DB, userID int, category, notificationType string, actorID int, relatedID *int64) error {
+	query := `
+		DELETE FROM notifications
+		WHERE user_id = ? AND category = ? AND type = ? AND actor_id = ?
+	`
+	args := []any{userID, category, notificationType, actorID}
+	if relatedID != nil {
+		query += ` AND related_id = ?`
+		args = append(args, *relatedID)
+	}
+	_, err := db.Exec(query, args...)
+	return err
+}
+
+// UpsertMessage keeps one unread "new message" alert per chat. a new message
+// refreshes that alert (text, sender and time) instead of adding another row,
+// so a busy chat does not flood the notifications page
+func UpsertMessage(db *sql.DB, userID, actorID int, chatID int64, message string) (models.Notification, error) {
+	var existingID int64
+	err := db.QueryRow(`
+		SELECT id FROM notifications
+		WHERE user_id = ? AND category = 'messages' AND type = 'new_message'
+		  AND related_id = ? AND is_read = 0
+		ORDER BY id DESC
+		LIMIT 1
+	`, userID, chatID).Scan(&existingID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Create(db, userID, models.CreateNotificationRequest{
+			ActorID:   &actorID,
+			Category:  "messages",
+			Type:      "new_message",
+			Message:   message,
+			RelatedID: &chatID,
+		})
+	}
+	if err != nil {
+		return models.Notification{}, err
+	}
+
+	if _, err := db.Exec(`
+		UPDATE notifications
+		SET message = ?, actor_id = ?, created_at = CURRENT_TIMESTAMP
+		WHERE id = ?
+	`, message, actorID, existingID); err != nil {
+		return models.Notification{}, err
+	}
+	return GetByID(db, userID, existingID)
 }
 
 // GetByID gets one notification, only if it belongs to this user
@@ -210,12 +266,10 @@ func ListByRelatedID(db *sql.DB, category, notificationType string, relatedID in
 	return result, rows.Err()
 }
 
-// IsCategory checks the category is one of the 4 we support
+// IsCategory checks the category is one of the 5 we support
 func IsCategory(category string) bool {
 	switch category {
-	case "requests", "groups", "events":
-		return true
-	case "messages":
+	case "requests", "groups", "events", "messages", "posts":
 		return true
 	default:
 		return false
@@ -243,7 +297,17 @@ const notificationSelect = `
 		(SELECT status FROM user_followers f WHERE n.type = 'follow_request'
 		 AND f.target_id = n.user_id AND f.follower_id = n.actor_id) AS follow_status,
 		(SELECT response FROM event_rsvps v WHERE n.type = 'event_created'
-		 AND v.event_id = n.related_id AND v.user_id = n.user_id) AS event_response
+		 AND v.event_id = n.related_id AND v.user_id = n.user_id) AS event_response,
+
+		-- the group a notification is about, so the page can link to it
+		CASE
+			WHEN n.category = 'events' THEN (SELECT e.group_id FROM events e WHERE e.id = n.related_id)
+			WHEN n.type = 'join_request' THEN gjr.group_id
+			WHEN n.type = 'invitation' THEN gi.group_id
+			WHEN n.category = 'groups' THEN n.related_id
+		END AS group_id,
+		COALESCE(actor.first_name || ' ' || actor.last_name, '') AS actor_name,
+		COALESCE(actor_profile.avatar_path, '') AS actor_avatar
 
 	FROM notifications n
 
@@ -258,6 +322,9 @@ const notificationSelect = `
 		AND n.type = 'invitation'
 		AND gi.id = n.related_id
 		AND gi.user_id = n.user_id
+
+	LEFT JOIN user actor ON actor.id = n.actor_id
+	LEFT JOIN profile actor_profile ON actor_profile.user_id = n.actor_id
 `
 
 // small interface so scanNotification works with both QueryRow and Query rows
@@ -284,6 +351,9 @@ func scanNotification(row rowScanner) (models.Notification, error) {
 		&notification.InvitationStatus,
 		&notification.FollowStatus,
 		&notification.EventResponse,
+		&notification.GroupID,
+		&notification.ActorName,
+		&notification.ActorAvatar,
 	); err != nil {
 		return models.Notification{}, err
 	}

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AuthenticatedLayout from '@/components/layout/AuthenticatedLayout.vue'
 import IconGlyph from '@/components/layout/IconGlyph.vue'
 import {
@@ -9,6 +9,12 @@ import {
   markNotificationRead,
 } from '@/api/notifications.js'
 import { subscribeRealtime } from '@/services/realtime.js'
+import { useRouter } from 'vue-router'
+import { notificationLink, notificationTitle } from '@/helpers/notificationDisplay.js'
+import { refreshNotifications } from '@/helpers/useNotifications.js'
+import { refreshChats } from '@/helpers/useChats.js'
+
+const router = useRouter()
 
 // the filter tabs on top of the page
 const filters = [
@@ -16,6 +22,7 @@ const filters = [
   { id: 'requests', label: 'Requests' },
   { id: 'groups', label: 'Groups' },
   { id: 'events', label: 'Events' },
+  { id: 'posts', label: 'Posts' },
   { id: 'messages', label: 'Messages' },
 ]
 
@@ -36,11 +43,9 @@ let lastLoadedAt = 0
 
 const activeFilter = ref('all')
 
-// only show the notifications of the tab that is picked
-const visibleNotifications = computed(() => {
-  if (activeFilter.value === 'all') return notificationItems.value
-  return notificationItems.value.filter((item) => item.type === activeFilter.value)
-})
+// the server sends only the picked tab, so every tab can scroll through all of its items
+const visibleNotifications = computed(() => notificationItems.value)
+watch(activeFilter, () => loadNotifications())
 
 const unreadCount = computed(() => unreadTotal.value)
 
@@ -60,6 +65,7 @@ function actionLabel(action) {
     reject: 'Rejected',
     join: 'Joined',
     rsvp: 'Going',
+    going: 'Going',
   }[action] || action
 }
 
@@ -71,6 +77,7 @@ function notificationForDisplay(notification) {
     groups: { icon: 'groups', color: '#3ee6b0' },
     events: { icon: 'calendar', color: '#ffb84d' },
     messages: { icon: 'chat', color: '#55b7ff' },
+    posts: { icon: 'image', color: '#ff6b8a' },
   }
 
   const style =
@@ -116,7 +123,8 @@ function notificationForDisplay(notification) {
     icon: style.icon,
     color: style.color,
     title: notification.message,
-    detail: notification.type.replaceAll('_', ' '),
+    detail: notificationTitle(notification),
+    link: notificationLink(notification),
     time: formatNotificationTime(notification.createdAt),
     unread: !notification.isRead,
     action,
@@ -129,9 +137,12 @@ function receiveRealtimeNotification(event) {
   const notification = event?.notification
   if (!notification?.id) return
   const item = notificationForDisplay(notification)
+  if (activeFilter.value !== 'all' && item.type !== activeFilter.value) return
   const index = notificationItems.value.findIndex(existing => existing.id === item.id)
   if (index >= 0) {
-    notificationItems.value[index] = { ...notificationItems.value[index], ...item }
+    // an updated alert (like a newer message in the same chat) moves back to the top
+    const [existing] = notificationItems.value.splice(index, 1)
+    notificationItems.value.unshift({ ...existing, ...item })
     return
   }
   notificationItems.value.unshift(item)
@@ -151,7 +162,7 @@ async function loadNotifications({ append = false } = {}) {
   loadError.value = ''
 
   try {
-    const result = await getNotifications('all', {
+    const result = await getNotifications(activeFilter.value, {
       limit: NOTIFICATION_PAGE_SIZE,
       offset: append ? notificationItems.value.length : 0,
     })
@@ -167,17 +178,26 @@ async function loadNotifications({ append = false } = {}) {
   }
 }
 
-// clicking a notification marks it as read
-async function markAsRead(item) {
-  if (!item.unread) return
+// the badges in the top bar and side menu count from the server again
+function refreshBadges() {
+  refreshNotifications()
+  refreshChats()
+}
 
-  try {
-    await markNotificationRead(item.id)
-    item.unread = false
-    unreadTotal.value = Math.max(0, unreadTotal.value - 1)
-  } catch (error) {
-    loadError.value = error.message || 'Could not mark notification as read.'
+// clicking a notification marks it as read and opens what it is about
+async function openNotification(item) {
+  if (item.unread) {
+    try {
+      await markNotificationRead(item.id)
+      item.unread = false
+      unreadTotal.value = Math.max(0, unreadTotal.value - 1)
+      refreshBadges()
+    } catch (error) {
+      loadError.value = error.message || 'Could not mark notification as read.'
+    }
   }
+
+  if (item.link) router.push(item.link)
 }
 
 // the "mark all as read" button
@@ -188,6 +208,7 @@ async function markAllAsRead() {
     notificationItems.value.forEach((item) => {
       item.unread = false
     })
+    refreshBadges()
   } catch (error) {
     loadError.value = error.message || 'Could not mark notifications as read.'
   }
@@ -202,9 +223,10 @@ async function chooseAction(item, action) {
 
   try {
     await applyNotificationAction(item.id, action)
-    item.action = action
+    item.action = action === 'rsvp' ? 'going' : action
     if (item.unread) unreadTotal.value = Math.max(0, unreadTotal.value - 1)
     item.unread = false
+    refreshBadges()
   } catch (error) {
     item.action = previousAction
     loadError.value = error.message || 'Could not complete notification action.'
@@ -296,7 +318,8 @@ onBeforeUnmount(() => {
       <div v-else-if="visibleNotifications.length" class="notification-list">
         <!-- one notification -->
         <article v-for="item in visibleNotifications" :key="item.id" class="notification-item"
-          :class="{ 'notification-item--unread': item.unread }" @click="markAsRead(item)">
+          :class="{ 'notification-item--unread': item.unread, 'notification-item--link': item.link }"
+          @click="openNotification(item)">
           <div class="notification-item__icon" :style="{ background: item.color }" aria-hidden="true">
             <IconGlyph :name="item.icon" :size="19" :stroke-width="2" />
           </div>
@@ -401,6 +424,10 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.notification-item--link {
+  cursor: pointer;
+}
+
 .notifications-page {
   width: 100%;
   min-width: 0;
@@ -675,12 +702,16 @@ onBeforeUnmount(() => {
   line-height: 1.5;
 }
 
-@media (min-width: 48rem) {
+/* the legend only sits next to the list when there is real room for both,
+   otherwise it goes under the list so the title and buttons do not get squeezed */
+@media (min-width: 80rem) {
   .notifications-layout {
     grid-template-columns: minmax(0, 1fr) 18rem;
     align-items: start;
   }
+}
 
+@media (min-width: 48rem) {
   .notifications-page {
     padding: var(--space-6);
   }

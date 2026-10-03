@@ -14,7 +14,7 @@ Returns:
 */
 func GetHashedPassowrd(db *sql.DB, identifier string) (string, error) {
 	var password string
-	err := db.QueryRow(`select password from user where email = ? OR username = ?`, identifier, identifier).Scan(&password)
+	err := db.QueryRow(`select password from user where email = LOWER(?) OR username = LOWER(?)`, identifier, identifier).Scan(&password)
 	if err != nil {
 		return "", err
 	}

@@ -1,4 +1,4 @@
-import { profileData } from "@/data/usersData";
+import { viewedProfile as profileData } from "@/data/usersData";
 import { checkSessionResponse } from "@/helpers/auth/auth";
 import { router } from "@/router/router";
 
@@ -57,6 +57,7 @@ export async function getProfileData(id, count) {
 
     profileData.show = result.showProfile;
     profileData.isFollowing = result.followStatus;
+    profileData.canMessage = Boolean(result.canMessage);
     if (profileData.show) {
         profileData.userInfo.userName = result.data.UserInfo.UserName || ''
         profileData.userInfo.email = result.data.UserInfo.Email

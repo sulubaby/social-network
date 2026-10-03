@@ -1,2 +1,2 @@
 ALTER TABLE comments
-DROP column images;
+DROP COLUMN image;

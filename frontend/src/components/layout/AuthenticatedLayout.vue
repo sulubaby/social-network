@@ -24,14 +24,17 @@ async function getData() {
   try {
     const result = await getUserData()
 
+    // no result means the session ended and we are already going to /login
+    if (!result) return
+
     if (!result.status) {
-      addNotification(result.message || 'could not get data')
+      addNotification(result.message || 'Could not load your account', 'error')
       return
     }
 
     user.value = result.data
   } catch (err) {
-    addNotification(err || 'could not get data')
+    addNotification(err || 'Could not load your account', 'error')
   }
 }
 

@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useNotifications } from '@/helpers/useNotifications.js'
 import IconGlyph from '@/components/layout/IconGlyph.vue'
+import { notificationLink } from '@/helpers/notificationDisplay.js'
 // the right side box on the home feed. it shows my 4 newest notifications
 // using the same shared list as the top bar
 const { items, unreadCount, error } = useNotifications()
@@ -14,7 +15,7 @@ const recent = computed(() => items.value.slice(0, 4))
     <p v-if="error" role="status">{{ error }}</p>
     <p v-else-if="!recent.length">No notifications yet. Updates from your community will appear here.</p>
     <ul v-else>
-      <li v-for="item in recent" :key="item.id"><a href="/notifications">{{ item.message }}</a></li>
+      <li v-for="item in recent" :key="item.id"><RouterLink :to="notificationLink(item) || '/notifications'">{{ item.message }}</RouterLink></li>
     </ul>
     <a class="activity-link" href="/notifications">View notifications <IconGlyph name="arrowRight" :size="15" /></a>
     <a class="activity-link" href="/groups">Explore groups <IconGlyph name="arrowRight" :size="15" /></a>

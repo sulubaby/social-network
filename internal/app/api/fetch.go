@@ -157,6 +157,10 @@ func (app *App) SearchFollows(w http.ResponseWriter, r *http.Request) {
 		targetID = parsedID
 	}
 
+	if !app.canSeeConnections(w, userID, targetID) {
+		return
+	}
+
 	searchValue := r.URL.Query().Get("search")
 
 	follows, err := profiles.SearchFollows(app.DB, targetID, searchValue)
@@ -201,6 +205,10 @@ func (app *App) SearchFollowing(w http.ResponseWriter, r *http.Request) {
 		}
 
 		targetID = parsedID
+	}
+
+	if !app.canSeeConnections(w, userID, targetID) {
+		return
 	}
 
 	searchValue := r.URL.Query().Get("search")

@@ -92,7 +92,7 @@ func GetPostByID(db *sql.DB, postID int64) (models.Post, error) {
 		SELECT
 			posts.id,
 			posts.user_id,
-			COALESCE(users.username, users.first_name || ' ' || users.last_name),
+			users.first_name || ' ' || users.last_name,
 			COALESCE(profile.avatar_path, ''),
 			posts.content,
 			posts.image_path,
@@ -146,7 +146,7 @@ const visiblePostsQuery = `
 		SELECT
 			posts.id,
 			posts.user_id,
-			COALESCE(users.username, users.first_name || ' ' || users.last_name),
+			users.first_name || ' ' || users.last_name,
 			COALESCE(profile.avatar_path, ''),
 			posts.content,
 			posts.image_path,

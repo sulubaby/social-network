@@ -28,8 +28,10 @@ COPY --from=builder /app/server ./server
 COPY --from=builder /go/bin/migrate /usr/local/bin/migrate
 
 COPY internal/migrations ./internal/migrations
+# the default avatar new accounts start with
+COPY images ./images
 
-RUN mkdir -p ./db ./uploads/avatars ./uploads/posts ./uploads/groups/avatars ./uploads/comments ./images/avatars
+RUN mkdir -p ./db ./uploads/avatars ./uploads/posts ./uploads/groups/avatars ./uploads/comments ./images/avatar
 
 EXPOSE 4000
 

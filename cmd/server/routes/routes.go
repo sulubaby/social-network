@@ -3,6 +3,7 @@ package routes
 import (
 	"database/sql"
 	"net/http"
+	"os"
 	"social/internal/app/api"
 	"social/internal/realtime"
 )
@@ -11,8 +12,8 @@ func StartServer(db *sql.DB) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	app := api.App{DB: db, Realtime: realtime.NewHub(),
-		EmailPassword: "lmvm ugpc xvlo food",
-		EmailAddress:  "almadhoonlinux@gmail.com"}
+		EmailPassword: envOr("ORBIT_EMAIL_PASSWORD", "lmvm ugpc xvlo food"),
+		EmailAddress:  envOr("ORBIT_EMAIL_ADDRESS", "almadhoonlinux@gmail.com")}
 	
 	// users
 	mux.HandleFunc("GET /api/user", app.AuthMiddleware(app.GetUserData))
@@ -91,9 +92,19 @@ func StartServer(db *sql.DB) *http.ServeMux {
 	mux.HandleFunc("DELETE /api/groups/{id}", app.AuthMiddleware(app.DeleteGroup))
 	mux.HandleFunc("POST /api/groups/{id}/join-requests", app.AuthMiddleware(app.JoinRequest))
 	mux.HandleFunc("DELETE /api/groups/{id}/join-requests", app.AuthMiddleware(app.UndoJoinRequest))
+	mux.HandleFunc("DELETE /api/groups/{id}/members/me", app.AuthMiddleware(app.LeaveGroup))
+	mux.HandleFunc("PATCH /api/groups/{id}/invitation", app.AuthMiddleware(app.AnswerGroupInvitation))
 
 	mux.HandleFunc("GET /ws", app.AuthMiddleware(app.WsHandler))
 
 	mux.HandleFunc("GET /uploads/", app.AuthMiddleware(app.ServeUpload))
 	return mux
+}
+
+// envOr reads a setting from the environment, so secrets can live outside the code
+func envOr(name, fallback string) string {
+	if value := os.Getenv(name); value != "" {
+		return value
+	}
+	return fallback
 }

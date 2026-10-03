@@ -21,16 +21,19 @@ let lastRefresh = 0
 // if we already have it we update it, if not we put it on top and add to the unread count
 function receiveNotification(event) {
   const notification = event?.notification
-  if (!notification?.id) return
+  // chat messages have their own badge on the chat icon
+  if (!notification?.id || notification.category === 'messages') return
   const index = items.value.findIndex(item => item.id === notification.id)
   if (index >= 0) {
-    items.value[index] = notification
+    items.value.splice(index, 1)
+    items.value.unshift(notification)
     return
   }
   items.value.unshift(notification)
   if (!notification.isRead) unreadCount.value += 1
 }
 
+// the server count is the truth, pages call this after marking things read
 export async function refreshNotifications() {
   if (pending) return
   pending = true
@@ -38,7 +41,7 @@ export async function refreshNotifications() {
   try {
     // The header and feed sidebar only need a small recent preview. The full
     // notifications screen loads the rest page by page as the user scrolls.
-    const result = await getNotifications('all', {
+    const result = await getNotifications('alerts', {
       limit: NOTIFICATION_PREVIEW_SIZE,
       offset: 0,
     })

@@ -12,10 +12,12 @@ const emit = defineEmits(['close', 'create'])
 
 const title = ref('')
 const description = ref('')
+const formError = ref('')
 
 function submitGroup() {
+    formError.value = ''
     if (!title.value.trim() || !description.value.trim()) {
-        console.log("Error: the title and description could not be empty!")
+        formError.value = 'The title and the description are both required.'
         return
     }
 
@@ -42,7 +44,7 @@ function submitGroup() {
                         Group Title
                     </label>
 
-                    <input id="group-title" v-model="title" type="text" placeholder="Enter group title" />
+                    <input id="group-title" v-model="title" type="text" maxlength="45" placeholder="Enter group title" />
                 </div>
 
                 <div class="form-group">
@@ -50,9 +52,11 @@ function submitGroup() {
                         Description
                     </label>
 
-                    <textarea id="group-description" v-model="description"
+                    <textarea id="group-description" v-model="description" maxlength="500"
                         placeholder="Tell people what this group is about"></textarea>
                 </div>
+
+                <p v-if="formError" class="form-error" role="alert">{{ formError }}</p>
 
                 <div class="actions">
                     <button class="cancel-button" type="button" @click="emit('close')">
@@ -69,6 +73,12 @@ function submitGroup() {
 </template>
 
 <style scoped>
+.form-error {
+    margin: 0 0 1rem;
+    color: var(--color-coral);
+    font-size: .875rem;
+}
+
 .modal-overlay {
     position: fixed;
     inset: 0;

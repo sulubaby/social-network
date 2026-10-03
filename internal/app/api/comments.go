@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"net/http"
 	"social/database/comments"
+	"social/database/notifications"
 	"social/database/posts"
 	"social/internal/helpers"
 	"social/internal/models"
@@ -234,6 +236,7 @@ func (app App) createComment(w http.ResponseWriter, r *http.Request, userID int,
 	}
 
 	comment.Own = true
+	app.notifyPostOwner(postID, userID, "post_comment", "commented on your post")
 
 	writeJSON(w, http.StatusCreated, map[string]any{
 		"status":  true,
@@ -291,4 +294,21 @@ func (app App) DeleteComment(w http.ResponseWriter, r *http.Request) {
 		"status":  true,
 		"message": "comment deleted",
 	})
+}
+
+// notifyPostOwner tells the author of a post that someone liked or commented on it
+func (app App) notifyPostOwner(postID int64, actorID int, notificationType, action string) {
+	var ownerID int
+	if err := app.DB.QueryRow(`SELECT user_id FROM posts WHERE id = ?`, postID).Scan(&ownerID); err != nil {
+		log.Printf("find post owner: %v", err)
+		return
+	}
+	if ownerID == actorID {
+		return
+	}
+	// one alert per person and post, so liking twice does not stack up
+	if err := notifications.DeleteFromActor(app.DB, ownerID, "posts", notificationType, actorID, &postID); err != nil {
+		log.Printf("clear old post notification: %v", err)
+	}
+	app.notify(ownerID, actorID, "posts", notificationType, app.userFullName(actorID)+" "+action, &postID)
 }

@@ -7,6 +7,7 @@ import {
   undoJoinGroup,
   deleteGroupApi,
 } from "@/api/groups/Groups";
+import { addNotification } from "@/data/notifications";
 
 export function useGroups() {
   const route = useRoute();
@@ -62,16 +63,21 @@ export function useGroups() {
       return;
     }
 
-    if (!groupToModify.isRequested) {
-      const result = await groupJoinRequest(id);
-      if (result?.status) {
-        groupToModify.isRequested = true;
+    try {
+      if (!groupToModify.isRequested) {
+        const result = await groupJoinRequest(id);
+        if (result?.status) {
+          groupToModify.isRequested = true;
+          addNotification(`Join request sent to ${groupToModify.title}`);
+        }
+      } else {
+        const result = await undoJoinGroup(id);
+        if (result?.status) {
+          groupToModify.isRequested = false;
+        }
       }
-    } else {
-      const result = await undoJoinGroup(id);
-      if (result?.status) {
-        groupToModify.isRequested = false;
-      }
+    } catch (error) {
+      addNotification(error.message || "Could not update your join request", "error");
     }
   }
 
@@ -89,11 +95,15 @@ export function useGroups() {
 
       const group = result.group;
 
-      AllGroupsdata.value.push(group);
+      // newest groups are shown first
+      AllGroupsdata.value.unshift(group);
 
       closeModal();
+      // my new group is under "My Groups", show that tab so it is visible
+      activeTab.value = "my-groups";
+      addNotification(`${group.title} was created`);
     } catch (error) {
-      console.error(error);
+      addNotification(error.message || "Could not create the group", "error");
     }
   }
 
@@ -107,7 +117,7 @@ export function useGroups() {
         );
       }
     } catch (error) {
-      console.error(error);
+      addNotification(error.message || "Could not delete the group", "error");
     }
   }
 

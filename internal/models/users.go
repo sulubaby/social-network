@@ -20,6 +20,8 @@ type UserRegistration struct {
 type UserLogger struct {
 	Identifier string
 	Pass       string
+	// false means the cookie only lives until the browser is closed
+	Remember *bool
 }
 
 type UserData struct {

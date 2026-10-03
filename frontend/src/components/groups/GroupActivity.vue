@@ -58,6 +58,15 @@ async function load() {
 
 async function createEvent() {
   if (eventBusy.value) return
+  const when = new Date(startsAt.value)
+  if (!title.value.trim() || !description.value.trim() || Number.isNaN(when.getTime())) {
+    showMessage('Give the event a title, a description and a date and time.', true)
+    return
+  }
+  if (when.getTime() <= Date.now()) {
+    showMessage('The event has to be in the future.', true)
+    return
+  }
   eventBusy.value = true
   try {
     const result = await createGroupEvent(props.groupId, { title: title.value, description: description.value, startsAt: new Date(startsAt.value).toISOString() })

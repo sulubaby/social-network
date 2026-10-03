@@ -1,5 +1,5 @@
 import { checkSessionResponse } from "@/helpers/auth/auth";
-import { router } from "@/router/router";
+import { forgetSession, router } from "@/router/router";
 import { disconnectRealtime } from "@/services/realtime";
 
 function buildError(data, status, fallback) {
@@ -97,6 +97,8 @@ export async function loggingSession(userLogger) {
         throw new Error(result.message || `Logging failed: ${resp.status}`)
     }
 
+    // the new cookie is set, the router has to check again
+    forgetSession()
     return result
 }
 
@@ -108,6 +110,7 @@ export async function logout() {
     
     if(!checkSessionResponse(resp)) {
         disconnectRealtime()
+        forgetSession()
         router.push("/login");
         return
     }
@@ -118,6 +121,7 @@ export async function logout() {
     }
 
     disconnectRealtime()
+    forgetSession()
     router.push("/login")
 }
 

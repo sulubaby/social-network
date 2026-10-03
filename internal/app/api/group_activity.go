@@ -148,7 +148,7 @@ func (app App) InviteGroupMember(w http.ResponseWriter, r *http.Request) {
 		helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{"status": false, "message": "could not save invitation"})
 		return
 	}
-	notificationResult, err := tx.Exec(`INSERT INTO notifications (user_id,actor_id,category,type,message,related_id) SELECT ?,?,'groups','invitation','You are invited to ' || title,? FROM groups WHERE id=?`, input.UserID, userID, invitationID, groupID)
+	notificationResult, err := tx.Exec(`INSERT INTO notifications (user_id,actor_id,category,type,message,related_id) SELECT ?,?,'groups','invitation',? || ' invited you to ' || title,? FROM groups WHERE id=?`, input.UserID, userID, app.userFullName(userID), invitationID, groupID)
 	if err != nil {
 		helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{"status": false, "message": "could not save notification"})
 		return
@@ -324,7 +324,7 @@ func (app App) GroupEvents(w http.ResponseWriter, r *http.Request) {
 		helpers.WriteJson(w, 500, map[string]any{"message": "could not save event"})
 		return
 	}
-	_, err = tx.Exec(`INSERT INTO notifications (user_id,actor_id,category,type,message,related_id) SELECT user_id,?,'events','event_created',?,? FROM group_members WHERE group_id=? AND user_id<>?`, userID, "New event: "+input.Title, id, groupID, userID)
+	_, err = tx.Exec(`INSERT INTO notifications (user_id,actor_id,category,type,message,related_id) SELECT user_id,?,'events','event_created',?,? FROM group_members WHERE group_id=? AND user_id<>?`, userID, "New event in "+app.groupTitle(groupID)+": "+input.Title, id, groupID, userID)
 	if err != nil {
 		helpers.WriteJson(w, 500, map[string]any{"message": "could not notify members"})
 		return

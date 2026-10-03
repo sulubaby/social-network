@@ -10,6 +10,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/smtp"
+	"os"
 	"regexp"
 	"social/database/users"
 	"social/internal/helpers"
@@ -248,6 +249,12 @@ Returns:
 	error -> nil if success
 */
 func (app *App) SendVerificationEmail(to string, code string) error {
+	// local testing: print the code in the server log instead of sending a real email
+	if os.Getenv("ORBIT_EMAIL_DEV_LOG") == "1" {
+		log.Printf("verification code for %s: %s", to, code)
+		return nil
+	}
+
 	auth := smtp.PlainAuth(
 		"",
 		app.EmailAddress,

@@ -32,4 +32,8 @@ type ChatMessage struct {
 	Content    string `json:"content"`
 	CreatedAt  string `json:"createdAt"`
 	IsOwn      bool   `json:"isOwn"`
+	// only filled on live events so the page knows where a message belongs
+	ChatType   string `json:"chatType,omitempty"`
+	GroupID    int64  `json:"groupId,omitempty"`
+	GroupTitle string `json:"groupTitle,omitempty"`
 }

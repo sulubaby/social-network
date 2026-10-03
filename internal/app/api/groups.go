@@ -3,7 +3,10 @@ package api
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
+	"log"
 	"net/http"
+	"social/database/groups"
 	"social/internal/helpers"
 	"strconv"
 	"strings"
@@ -158,6 +161,14 @@ func (app App) CreateGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len([]rune(input.Title)) > 45 || len([]rune(input.Description)) > 500 {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"status":  false,
+			"message": "the title can have 45 characters and the description 500",
+		})
+		return
+	}
+
 	tx, err := app.DB.Begin()
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{
@@ -220,7 +231,7 @@ func (app App) CreateGroup(w http.ResponseWriter, r *http.Request) {
 			"id":          groupID,
 			"title":       input.Title,
 			"description": input.Description,
-			"creator_id":  userID,
+			"creatorId":   userID,
 			"memberCount": 1,
 			"isMember":    true,
 			"isRequested": false,
@@ -256,9 +267,12 @@ func (app App) GetGroup(w http.ResponseWriter, r *http.Request) {
 		IsMember    bool   `json:"isMember"`
 		IsRequested bool   `json:"isRequested"`
 		IsCreator   bool   `json:"isCreator"`
+		// set when someone invited me and i did not answer yet
+		InvitationID *int64 `json:"invitationId"`
 	}
 
 	var group Group
+	var invitationID sql.NullInt64
 
 	err = app.DB.QueryRow(`
 		SELECT
@@ -284,7 +298,15 @@ func (app App) GetGroup(w http.ResponseWriter, r *http.Request) {
 				  AND status = 'pending'
 			) AS is_requested,
 
-			g.creator_id = ? AS is_creator
+			g.creator_id = ? AS is_creator,
+
+			(
+				SELECT id
+				FROM group_invitations
+				WHERE group_id = g.id
+				  AND user_id = ?
+				  AND status = 'pending'
+			) AS invitation_id
 
 		FROM groups g
 
@@ -298,7 +320,7 @@ func (app App) GetGroup(w http.ResponseWriter, r *http.Request) {
 			g.title,
 			g.description,
 			g.creator_id
-	`, userID, userID, userID, groupID).Scan(
+	`, userID, userID, userID, userID, groupID).Scan(
 		&group.ID,
 		&group.Title,
 		&group.Description,
@@ -307,7 +329,11 @@ func (app App) GetGroup(w http.ResponseWriter, r *http.Request) {
 		&group.IsMember,
 		&group.IsRequested,
 		&group.IsCreator,
+		&invitationID,
 	)
+	if invitationID.Valid {
+		group.InvitationID = &invitationID.Int64
+	}
 
 	if err == sql.ErrNoRows {
 		writeJSON(w, http.StatusNotFound, map[string]any{
@@ -497,7 +523,7 @@ func (app App) JoinRequest(w http.ResponseWriter, r *http.Request) {
 		userID,
 		"groups",
 		"join_request",
-		"requested to join your group",
+		app.userFullName(userID)+" wants to join "+app.groupTitle(groupID),
 		requestID,
 	)
 	if err != nil {
@@ -627,4 +653,82 @@ func (app App) UndoJoinRequest(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status": true,
 	})
+}
+
+// LeaveGroup handles DELETE /api/groups/{id}/members/me
+func (app App) LeaveGroup(w http.ResponseWriter, r *http.Request) {
+	userID, groupID, ok := groupRequestIdentity(w, r)
+	if !ok {
+		return
+	}
+
+	err := groups.LeaveGroup(app.DB, userID, groupID)
+	switch {
+	case errors.Is(err, groups.ErrGroupNotFound):
+		writeJSON(w, http.StatusNotFound, map[string]any{"status": false, "message": "group not found"})
+	case errors.Is(err, groups.ErrCreatorCannotLeave), errors.Is(err, groups.ErrNotMember):
+		writeJSON(w, http.StatusBadRequest, map[string]any{"status": false, "message": err.Error()})
+	case err != nil:
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"status": false, "message": "could not leave group"})
+	default:
+		writeJSON(w, http.StatusOK, map[string]any{"status": true, "message": "you left the group"})
+	}
+}
+
+// AnswerGroupInvitation handles PATCH /api/groups/{id}/invitation with {"action": "join" | "decline"}
+// so an invited person can answer from the group page, not only from the notification
+func (app *App) AnswerGroupInvitation(w http.ResponseWriter, r *http.Request) {
+	userID, groupID, ok := groupRequestIdentity(w, r)
+	if !ok {
+		return
+	}
+
+	var input struct {
+		Action string `json:"action"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024)).Decode(&input); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"status": false, "message": "invalid action"})
+		return
+	}
+
+	var invitationID int64
+	err := app.DB.QueryRow(`
+		SELECT id FROM group_invitations
+		WHERE group_id = ? AND user_id = ? AND status = 'pending'
+	`, groupID, userID).Scan(&invitationID)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, map[string]any{"status": false, "message": "no pending invitation"})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"status": false, "message": "could not load invitation"})
+		return
+	}
+
+	switch input.Action {
+	case "join":
+		_, inviterID, err := groups.AcceptInvitation(app.DB, userID, invitationID)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"status": false, "message": "could not join group"})
+			return
+		}
+		app.notify(inviterID, userID, "groups", "invitation_accepted", app.userFullName(userID)+" accepted your invitation to "+app.groupTitle(groupID), int64Ptr(groupID))
+	case "decline":
+		if err := groups.DeclineInvitation(app.DB, userID, invitationID); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"status": false, "message": "could not decline invitation"})
+			return
+		}
+	default:
+		writeJSON(w, http.StatusBadRequest, map[string]any{"status": false, "message": "action must be join or decline"})
+		return
+	}
+
+	// the invitation notification now shows the answer
+	if _, err := app.DB.Exec(`
+		UPDATE notifications SET is_read = 1
+		WHERE user_id = ? AND category = 'groups' AND type = 'invitation' AND related_id = ?
+	`, userID, invitationID); err != nil {
+		log.Printf("mark invitation notification read: %v", err)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": true, "action": input.Action})
 }

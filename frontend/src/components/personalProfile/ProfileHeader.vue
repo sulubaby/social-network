@@ -22,6 +22,7 @@ const props = defineProps({
   isFollowing: { type: Number, default: -1 },
   isPrivate: Boolean,
   dob: [Date, String],
+  canMessage: Boolean,
 })
 
 const emit = defineEmits(['relationship-change', 'select-tab'])
@@ -137,7 +138,7 @@ function initials() {
               {{ relationshipBusy ? 'Updating...' : 'Following' }}
             </button>
 
-            <RouterLink v-if="!addEdit" class="profile-action"
+            <RouterLink v-if="!addEdit && canMessage" class="profile-action"
               :to="{ path: '/chats', query: { user: route.query.id } }">
               <IconGlyph name="chat" :size="16" />
               Message

@@ -109,3 +109,34 @@ export const router = createRouter({
   history: createWebHistory(),
   routes,
 });
+
+// we ask the server once per page load if the cookie is still good.
+// after that every api helper sends us to /login by itself on a 401
+let sessionValid = null
+
+export function forgetSession() {
+  sessionValid = null
+}
+
+async function hasSession() {
+  if (sessionValid !== null) return sessionValid
+  try {
+    const response = await fetch('/api/session', { credentials: 'include' })
+    sessionValid = response.ok
+  } catch {
+    // server not reachable: let the page load and show its own error
+    return true
+  }
+  return sessionValid
+}
+
+// every page except /login needs a signed in user,
+// and a signed in user has nothing to do on /login
+router.beforeEach(async (to) => {
+  const loggedIn = await hasSession()
+  if (to.path === '/login') {
+    return loggedIn ? { path: '/home', replace: true } : true
+  }
+  if (!loggedIn) return { path: '/login', replace: true }
+  return true
+})

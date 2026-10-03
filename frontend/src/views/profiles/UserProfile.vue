@@ -4,7 +4,7 @@ import { useRoute } from 'vue-router'
 import { getProfileData } from '@/api/users/profiles'
 import { getPosts } from '@/api/posts/posts.js'
 import { toProfileCardPost } from '@/helpers/profilePosts.js'
-import { profileData } from '@/data/usersData'
+import { viewedProfile as profileData } from '@/data/usersData'
 import AuthenticatedLayout from '@/components/layout/AuthenticatedLayout.vue'
 import ProfileHeader from '@/components/personalProfile/ProfileHeader.vue'
 import ProfileTabs from '@/components/personalProfile/ProfileTabs.vue'
@@ -12,6 +12,7 @@ import PrivateProfileIcon from '@/components/ProfileEdit/PrivateProfileIcon.vue'
 import AboutTab from '@/components/Profile/AboutTab.vue'
 import FollowersTab from '@/components/Profile/FollowersTab.vue'
 import PostCard from '@/components/posts/PostCard.vue'
+import { subscribeRealtime } from '@/services/realtime.js'
 
 const route = useRoute()
 
@@ -70,9 +71,23 @@ function handleScroll() {
   }, 200)
 }
 
-onMounted(() => window.addEventListener('scroll', handleScroll, { passive: true }))
+// when this person accepts my follow request while i look at their profile,
+// open it up right away instead of waiting for a reload
+let stopNotificationListener
+function handleNotification(event) {
+  const notification = event?.notification
+  if (notification?.type === 'follow_accepted' && Number(notification.actorId) === profileId.value) {
+    loadProfile(profileId.value)
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('scroll', handleScroll, { passive: true })
+  stopNotificationListener = subscribeRealtime('notification', handleNotification)
+})
 
 onUnmounted(() => {
+  stopNotificationListener?.()
   window.removeEventListener('scroll', handleScroll)
   clearTimeout(throttleTimeout)
   throttleTimeout = null
@@ -112,10 +127,24 @@ async function loadProfile(idValue) {
 }
 
 function relationshipChanged(status) {
+  const previous = profileData.isFollowing
   profileData.isFollowing = status
+  // following them opens the chat, unfollowing may close it (unless they follow me)
+  if (status === 1) profileData.canMessage = true
 
-  // once i follow them i may see more posts (followers only ones), so reload the first page
-  if (status === 1) loadPosts()
+  // keep the follower number in the header right without reloading
+  if (previous !== 1 && status === 1) profileData.numOfFollowers += 1
+  if (previous === 1 && status !== 1) profileData.numOfFollowers = Math.max(0, profileData.numOfFollowers - 1)
+
+  if (status === 1) {
+    // a private profile opens up once i really follow it, so load everything again
+    if (!profileData.show) {
+      loadProfile(profileData.userInfo.id)
+      return
+    }
+    // i may see more posts now (followers only ones), so reload the first page
+    loadPosts()
+  }
 
   if (profileData.userInfo.isPrivate === 1 && status !== 1) {
     profileData.show = false
@@ -165,6 +194,7 @@ watch(() => route.query.id, loadProfile, { immediate: true })
           :is-following="profileData.isFollowing"
           :is-private="profileData.userInfo.isPrivate === 1"
           :dob="profileData.userInfo.dob"
+          :can-message="profileData.canMessage"
           @relationship-change="relationshipChanged"
           @select-tab="activeTab = $event"
         />
@@ -196,15 +226,15 @@ watch(() => route.query.id, loadProfile, { immediate: true })
               />
             </div>
 
-            <p v-if="loadingMore" class="profile-loading">
-              Loading more posts...
-            </p>
-
             <p
               v-else
               class="profile-empty orbit-surface"
             >
               No posts available.
+            </p>
+
+            <p v-if="loadingMore" class="profile-loading">
+              Loading more posts...
             </p>
           </section>
 

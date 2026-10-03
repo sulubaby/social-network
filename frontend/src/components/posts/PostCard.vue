@@ -1,6 +1,5 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
-import { useRoute } from 'vue-router'
 
 import CommentInput from '@/components/comments/CommentInput.vue'
 import CommentPreview from '@/components/comments/CommentPreview.vue'
@@ -13,6 +12,7 @@ import {
 } from '@/api/posts/comments.js'
 
 import { setPostLike } from '@/api/posts/posts.js'
+import { profileData } from '@/data/usersData'
 
 // the post we get from the parent (home feed or profile page)
 const props = defineProps({
@@ -24,8 +24,6 @@ const props = defineProps({
 
 // we tell the parent when the post got deleted so it can remove it from the list
 const emit = defineEmits(['deleted'])
-
-const route = useRoute()
 
 // comments state (they only load when you open the comments)
 const comments = ref([])
@@ -65,9 +63,11 @@ const COMMENTS_PAGE_SIZE = 20
 
 let commentsObserver
 
-// the delete menu only shows on my own profile page
+// the delete menu shows on my own posts, wherever they are listed
+// (profileData is me, the top bar loads it on every page)
 const canManagePost = computed(() => {
-  return route.path === '/me' || route.path === '/profile'
+  const myID = Number(profileData.userInfo.id)
+  return myID > 0 && Number(props.post.authorId) === myID
 })
 
 // comment number on the button. we take away the ones i deleted
@@ -756,7 +756,7 @@ onBeforeUnmount(() => {
         />
 
         <span>
-          {{ likeCount }} likes
+          {{ likeCount }} {{ likeCount === 1 ? 'like' : 'likes' }}
         </span>
       </button>
 
@@ -773,7 +773,7 @@ onBeforeUnmount(() => {
         />
 
         <span>
-          {{ commentCount }} comments
+          {{ commentCount }} {{ commentCount === 1 ? 'comment' : 'comments' }}
         </span>
 
         <span class="post-action__hint">

@@ -329,8 +329,20 @@ async function finishRegistration() {
 
     addNotification('Account created successfully.', 'success')
 
+    // sign the new account in right away with what was just typed
+    const email = String(pendingForm.get('Email') || '').trim().toLowerCase()
+    const password = String(pendingForm.get('Password') || '')
+    const remember = pendingForm.get('Remember') !== null
+
     resetVerification()
     signingUp.value = false
+
+    try {
+      const login = await loggingSession({ Identifier: email, Pass: password, Remember: remember })
+      if (login?.status) router.replace('/home')
+    } catch {
+      // the account exists, the person can still sign in with the form
+    }
   } catch (error) {
     if (error.status === 403) {
       verifiedEmail = ''
@@ -431,8 +443,9 @@ async function loggUser(event) {
 
   const formData = new FormData(event.target)
 
-  const identifier = formData.get('Identifier')
+  const identifier = String(formData.get('Identifier') || '').trim()
   const password = formData.get('Pass')
+  const remember = formData.get('Remember') !== null
 
   if (!identifier) {
     loginErrors.identifier = 'Email or username is required'
@@ -448,6 +461,7 @@ async function loggUser(event) {
     const result = await loggingSession({
       Identifier: identifier,
       Pass: password,
+      Remember: remember,
     })
 
     if (result.status) router.replace('/home')
@@ -536,7 +550,7 @@ async function loggUser(event) {
           </span>
 
           <label class="remember-row">
-            <input type="checkbox" checked />
+            <input type="checkbox" name="Remember" checked />
             <span>
               Keep me signed in on this device
               <small>session cookie</small>
@@ -787,7 +801,7 @@ async function loggUser(event) {
           </div>
 
           <label class="remember-row">
-            <input type="checkbox" checked />
+            <input type="checkbox" name="Remember" checked />
 
             <span>
               Keep me signed in on this device

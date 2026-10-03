@@ -22,8 +22,9 @@ onMounted(async () => {
   }
 })
 
+// null means the avatar was removed, the server uses the default picture again
 function onAvatarChange(avatarPath) {
-  if (avatarPath) profileData.userInfo.avatar = avatarPath
+  profileData.userInfo.avatar = avatarPath || 'avatars/default.png'
 }
 </script>
 

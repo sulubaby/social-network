@@ -161,6 +161,11 @@ function addPost(post) {
   showComposer.value = false
 }
 
+// my post was deleted from its card
+function removePost(postId) {
+  posts.value = posts.value.filter(post => post.id !== postId)
+}
+
 // the + button opens the post box in a popup instead of keeping it on the page
 const showComposer = ref(false)
 
@@ -271,6 +276,7 @@ onBeforeUnmount(() => {
             v-for="post in posts"
             :key="post.id"
             :post="post"
+            @deleted="removePost"
           />
         </template>
 

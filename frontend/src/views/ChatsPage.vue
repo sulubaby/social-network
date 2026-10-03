@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   getPrivateChats,
@@ -17,10 +17,10 @@ import {
   normalizeChatMessage,
   normalizeChatMessages,
 } from '@/helpers/chatMessages.js'
-import { sendChatMessage, subscribeRealtime } from '@/services/realtime.js'
+import { sendChatMessage, setOpenChat, subscribeRealtime } from '@/services/realtime.js'
 import { refreshChats } from '@/helpers/useChats.js'
 import { refreshNotifications } from '@/helpers/useNotifications.js'
-import { markNotificationRead } from '@/api/notifications.js'
+import { getNotifications, markNotificationRead } from '@/api/notifications.js'
 import { useChatTyping } from '@/helpers/useChatTyping.js'
 
 const conversations = ref([])
@@ -39,7 +39,20 @@ const error = ref('')
 const activeChatId = computed(() => activeChat.value?.id ?? null)
 const { typingCount } = useChatTyping(activeChatId)
 
+// the open chat does not need popups, its messages are already on screen
+watch(activeChatId, id => setOpenChat(id), { immediate: true })
+
 const MESSAGE_PAGE_SIZE = 20
+
+// chats that have messages i did not read yet (a mint dot in the list)
+const unreadChatIds = ref(new Set())
+
+function setChatUnread(chatId, unread) {
+  const next = new Set(unreadChatIds.value)
+  if (unread) next.add(Number(chatId))
+  else next.delete(Number(chatId))
+  unreadChatIds.value = next
+}
 
 const route = useRoute()
 const router = useRouter()
@@ -59,11 +72,31 @@ function appendActiveMessage(message) {
   }
 }
 
+// someone started a new conversation with me while this page is open:
+// load the list again so it shows up
+let reloadingConversations = false
+async function reloadConversations() {
+  if (reloadingConversations) return
+  reloadingConversations = true
+  try {
+    const result = await getPrivateChats()
+    conversations.value = result?.chats || []
+  } catch {
+    // the list stays as it is, the next page load will catch up
+  } finally {
+    reloadingConversations = false
+  }
+}
+
 function handleRealtimeMessage(event) {
+  // group messages are shown on the group page, not in private chats
+  if (event?.message?.chatType === 'group') return
+
   const message = normalizeChatMessage(event)
   const conversationIndex = conversations.value.findIndex(chat => Number(chat.id) === message.chatId)
   if (conversationIndex === -1) {
     if (loadingPage.value) pendingRealtimeMessages.push(event)
+    else reloadConversations()
     return
   }
 
@@ -118,10 +151,11 @@ onMounted(async () => {
   })
   stopNotificationListener = subscribeRealtime('notification', async event => {
     const notification = event?.notification
-    if (
-      notification?.category !== 'messages' ||
-      Number(notification.relatedId) !== Number(activeChat.value?.id)
-    ) return
+    if (notification?.category !== 'messages') return
+    if (Number(notification.relatedId) !== Number(activeChat.value?.id)) {
+      if (!notification.isRead) setChatUnread(notification.relatedId, true)
+      return
+    }
     try {
       await markNotificationRead(notification.id)
       await Promise.all([refreshChats(), refreshNotifications()])
@@ -131,20 +165,33 @@ onMounted(async () => {
   })
 
   try {
-    const [chatResult, userResult] = await Promise.all([
+    const [chatResult, userResult, messageAlerts] = await Promise.all([
       getPrivateChats(),
       getPrivateChatUsers(),
+      getNotifications('messages', { limit: 50, offset: 0 }).catch(() => null),
     ])
 
     conversations.value = chatResult?.chats || []
     candidates.value = userResult?.users || []
+    unreadChatIds.value = new Set(
+      (messageAlerts?.notifications || [])
+        .filter(item => !item.isRead)
+        .map(item => Number(item.relatedId)),
+    )
     pendingRealtimeMessages.splice(0).forEach(handleRealtimeMessage)
 
     const queryUser = Array.isArray(route.query.user) ? route.query.user[0] : route.query.user
     const targetUserId = Number(queryUser)
+    // ?chat= comes from a message notification
+    const queryChat = Array.isArray(route.query.chat) ? route.query.chat[0] : route.query.chat
+    const targetChatId = Number(queryChat)
 
     if (Number.isSafeInteger(targetUserId) && targetUserId > 0) {
       await startChat({ id: targetUserId })
+      router.replace({ path: '/chats' })
+    } else if (Number.isSafeInteger(targetChatId) && targetChatId > 0) {
+      const chat = conversations.value.find(item => Number(item.id) === targetChatId)
+      if (chat) await selectChat(chat)
       router.replace({ path: '/chats' })
     }
 
@@ -159,6 +206,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  setOpenChat(null)
   stopMessageListener?.()
   stopErrorListener?.()
   stopConnectionListener?.()
@@ -192,7 +240,10 @@ async function selectChat(chat) {
     pendingHistoryMessages.splice(0).forEach(message => {
       if (message.chatId === Number(chat.id)) appendActiveMessage(message)
     })
+    // opening the chat marked its message alerts read on the server
+    setChatUnread(chat.id, false)
     refreshChats()
+    refreshNotifications()
   } catch (err) {
     error.value = err.message
     messages.value = []
@@ -346,6 +397,7 @@ function shortTime(value) {
               <span class="conversation-copy"><strong>{{ displayName(chat.otherUser) }}</strong><small>{{
                 chat.latestMessage || 'No messages yet' }}</small></span>
               <time>{{ shortTime(chat.latestMessageTime) }}</time>
+              <span v-if="unreadChatIds.has(Number(chat.id))" class="conversation-unread" aria-label="Unread messages"></span>
             </button>
             <p v-if="!conversations.length" class="sidebar-empty">No conversations yet.</p>
           </section>
@@ -393,6 +445,20 @@ function shortTime(value) {
 </template>
 
 <style scoped>
+/* room for the unread dot after the time */
+.conversation-section .conversation-row {
+  grid-template-columns: 2.5rem minmax(0, 1fr) auto auto;
+}
+
+.conversation-unread {
+  width: .6rem;
+  height: .6rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--color-mint);
+  box-shadow: 0 0 0 3px rgb(var(--rgb-mint) / 20%);
+}
+
 .sr-only {
   position: absolute;
   width: 1px;

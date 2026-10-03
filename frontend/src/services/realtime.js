@@ -1,4 +1,5 @@
 import { addNotification } from '@/data/notifications'
+import { notificationLink, notificationTitle } from '@/helpers/notificationDisplay.js'
 import { readonly, ref } from 'vue'
 
 const status = ref('disconnected')
@@ -7,11 +8,13 @@ let socket = null
 let reconnectTimer = null
 let reconnectAttempt = 0
 let reconnectEnabled = false
-// last time we showed a "new message" popup for each chat.
-// it has to live outside the message handler, if not it resets every time
-// and the 30 second limit never works
-const lastMessageNotifications = new Map()
-const MESSAGE_POPUP_GAP = 30000
+// the chat that is open on screen right now. new messages for it are already
+// visible, so they should not pop up as a notification as well
+let openChatID = null
+
+export function setOpenChat(chatId) {
+  openChatID = chatId ? Number(chatId) : null
+}
 const TYPING_IDLE_DELAY = 1600
 const TYPING_REFRESH_DELAY = 2000
 const outgoingTyping = new Map()
@@ -28,6 +31,44 @@ function dispatch(type, event) {
     } catch (error) {
       console.error('Realtime listener failed:', error)
     }
+  }
+}
+
+// every live notification pops up at the top of the screen.
+// private messages come as a "messages" notification, group chat messages
+// only come as a message event, so those get their own popup here
+function showPopup(event) {
+  if (event.type === 'notification' && event.notification) {
+    const notification = event.notification
+    if (notification.isRead) return
+
+    if (notification.category === 'messages') {
+      if (Number(notification.relatedId) === openChatID) return
+      addNotification(notification.message, 'message', {
+        title: notificationTitle(notification),
+        to: notificationLink(notification),
+        key: `chat-${notification.relatedId}`,
+      })
+      return
+    }
+
+    addNotification(notification.message, 'alert', {
+      title: notificationTitle(notification),
+      to: notificationLink(notification),
+    })
+    return
+  }
+
+  if (event.type === 'message' && event.message?.chatType === 'group') {
+    const message = event.message
+    if (message.isOwn || Number(message.chatId) === openChatID) return
+    const sender = `${message.firstName || ''} ${message.lastName || ''}`.trim() || 'Someone'
+    const preview = String(message.content || '').slice(0, 80)
+    addNotification(`${sender}: ${preview}`, 'message', {
+      title: message.groupTitle ? `New message in ${message.groupTitle}` : 'New group message',
+      to: message.groupId ? `/groups/${message.groupId}?section=chat` : '',
+      key: `chat-${message.chatId}`,
+    })
   }
 }
 
@@ -75,20 +116,7 @@ export function connectRealtime() {
     try {
       const event = JSON.parse(rawEvent.data)
       if (!event?.type) return
-      if (
-        event.type === 'notification' &&
-        event.notification.category === 'messages'
-      ) {
-        // relatedId is the chat id, so each chat gets its own 30 second limit
-        const chatID = event.notification.relatedId
-        const now = Date.now()
-        const lastNotification = lastMessageNotifications.get(chatID) || 0
-
-        if (now - lastNotification >= MESSAGE_POPUP_GAP) {
-          lastMessageNotifications.set(chatID, now)
-          addNotification(event.notification.message)
-        }
-      }
+      showPopup(event)
       dispatch(event.type, event)
     } catch {
       dispatch('error', {

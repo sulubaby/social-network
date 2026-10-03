@@ -18,6 +18,9 @@ type Notification struct {
 	InvitationStatus *string   `json:"invitationStatus"`
 	FollowStatus     *int      `json:"followStatus"`
 	EventResponse    *string   `json:"eventResponse"`
+	GroupID          *int64    `json:"groupId"`
+	ActorName        string    `json:"actorName"`
+	ActorAvatar      string    `json:"actorAvatar"`
 }
 
 // the data we need when creating a new notification from the backend

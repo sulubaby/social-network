@@ -752,3 +752,52 @@ func assertMigrationRowCount(t *testing.T, db *sql.DB, query string, expected in
 		t.Fatalf("row count = %d, expected %d for %q", count, expected, query)
 	}
 }
+
+func TestPostNotificationsMigrationUpDownUp(t *testing.T) {
+	db, err := sql.Open("sqlite3", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1)
+	defer db.Close()
+
+	filenames, err := filepath.Glob("*.up.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sort.Strings(filenames)
+	for _, filename := range filenames {
+		runMigrationFile(t, db, filename)
+	}
+
+	_, err = db.Exec(`
+		INSERT INTO user (id, email, username, first_name, last_name, dob, password)
+		VALUES (1, 'owner@orbit.test', 'owner', 'Post', 'Owner', '2000-01-01', 'password'),
+		       (2, 'fan@orbit.test', 'fan', 'Post', 'Fan', '2000-01-01', 'password');
+		INSERT INTO posts (id, content, user_id, privacy) VALUES (7, 'hello', 1, 'public');
+		INSERT INTO notifications (user_id, actor_id, category, type, message, related_id)
+		VALUES (1, 2, 'posts', 'post_like', 'Post Fan liked your post', 7),
+		       (1, 2, 'requests', 'new_follower', 'Post Fan started following you', NULL);
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// deleting the post removes its like and comment alerts, but not the others
+	if _, err := db.Exec(`DELETE FROM posts WHERE id = 7`); err != nil {
+		t.Fatal(err)
+	}
+	assertMigrationRowCount(t, db, `SELECT COUNT(*) FROM notifications WHERE category = 'posts'`, 0)
+	assertMigrationRowCount(t, db, `SELECT COUNT(*) FROM notifications WHERE category = 'requests'`, 1)
+
+	runMigrationFile(t, db, "027_post_notifications.down.sql")
+	if _, err := db.Exec(`INSERT INTO notifications (user_id, category, type, message) VALUES (1, 'posts', 'post_like', 'x')`); err == nil {
+		t.Fatal("the posts category should not be allowed after the rollback")
+	}
+	assertMigrationRowCount(t, db, `SELECT COUNT(*) FROM notifications WHERE category = 'requests'`, 1)
+
+	runMigrationFile(t, db, "027_post_notifications.up.sql")
+	if _, err := db.Exec(`INSERT INTO notifications (user_id, category, type, message) VALUES (1, 'posts', 'post_like', 'x')`); err != nil {
+		t.Fatal(err)
+	}
+}

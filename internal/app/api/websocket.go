@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"io"
@@ -112,6 +113,20 @@ func (app *App) handleRealtimeMessage(client *realtime.Client, event incomingRea
 		app.sendRealtimeError(client, code, safeMessage)
 		return
 	}
+
+	// tell the receivers if this is a private or a group chat (and which group)
+	var groupID sql.NullInt64
+	var groupTitle sql.NullString
+	if err := app.DB.QueryRow(`
+		SELECT c.type, c.group_id, g.title
+		FROM chats c
+		LEFT JOIN groups g ON g.id = c.group_id
+		WHERE c.id = ?
+	`, event.ChatID).Scan(&message.ChatType, &groupID, &groupTitle); err != nil {
+		log.Printf("load realtime chat details: %v", err)
+	}
+	message.GroupID = groupID.Int64
+	message.GroupTitle = groupTitle.String
 
 	participants, err := chatsdb.GetChatParticipants(app.DB, event.ChatID)
 	if err != nil {

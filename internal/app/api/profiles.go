@@ -108,6 +108,18 @@ func (app *App) GetUserProfile(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// private chat is open when one of us follows the other (accepted)
+	var canMessage bool
+	if err := app.DB.QueryRow(`
+		SELECT EXISTS (
+			SELECT 1 FROM user_followers
+			WHERE status = 1
+			  AND ((follower_id = ? AND target_id = ?) OR (follower_id = ? AND target_id = ?))
+		)
+	`, userID, profileID, profileID, userID).Scan(&canMessage); err != nil {
+		log.Println(err)
+	}
+
 	// Public profile OR accepted follower
 	if !isPrivate || isFollowing == 1 {
 		userData, err := profiles.GetUserData(app.DB, profileID)
@@ -136,6 +148,7 @@ func (app *App) GetUserProfile(w http.ResponseWriter, r *http.Request) {
 			"status":       true,
 			"showProfile":  true,
 			"followStatus": isFollowing,
+			"canMessage":   canMessage,
 			"data":         userData,
 		})
 		return
@@ -168,6 +181,7 @@ func (app *App) GetUserProfile(w http.ResponseWriter, r *http.Request) {
 		"status":       true,
 		"showProfile":  false,
 		"followStatus": isFollowing,
+		"canMessage":   canMessage,
 		"data":         userData,
 	})
 }
@@ -223,6 +237,13 @@ func (app *App) RequestFollow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	isPrivate, err := profiles.IsPrivate(app.DB, targetID)
+	if errors.Is(err, sql.ErrNoRows) {
+		helpers.WriteJson(w, http.StatusNotFound, map[string]any{
+			"status":  false,
+			"message": "user not found",
+		})
+		return
+	}
 	if err != nil {
 		helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
 			"status":  false,
@@ -231,26 +252,27 @@ func (app *App) RequestFollow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var requestCode int
+	// asking again does not change anything, just tell the page the real status
+	currentStatus, err := profiles.CheckFollower(app.DB, followerID, targetID)
+	if err == nil {
+		helpers.WriteJson(w, http.StatusOK, map[string]any{
+			"status":       true,
+			"followStatus": currentStatus,
+			"message":      "already requested",
+		})
+		return
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
+			"status":  false,
+			"message": "could not check follow status",
+		})
+		return
+	}
+
+	requestCode := 1
 	if isPrivate {
 		requestCode = 0
-	} else {
-		requestCode = 1
-	}
-	var previousNotificationID int64
-	if requestCode == 0 {
-		previousNotification, notificationErr := notifications.GetLatestForActor(
-			app.DB,
-			targetID,
-			"requests",
-			"follow_request",
-			followerID,
-		)
-		if notificationErr == nil {
-			previousNotificationID = previousNotification.ID
-		} else if !errors.Is(notificationErr, sql.ErrNoRows) {
-			log.Printf("load previous follow request notification: %v", notificationErr)
-		}
 	}
 
 	if err := profiles.SendFollowRequest(app.DB, targetID, followerID, requestCode); err != nil {
@@ -260,7 +282,9 @@ func (app *App) RequestFollow(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
 	if requestCode == 0 {
+		// the follow request notification is made by a database trigger, push it live
 		notification, notificationErr := notifications.GetLatestForActor(
 			app.DB,
 			targetID,
@@ -268,11 +292,14 @@ func (app *App) RequestFollow(w http.ResponseWriter, r *http.Request) {
 			"follow_request",
 			followerID,
 		)
-		if notificationErr != nil && !errors.Is(notificationErr, sql.ErrNoRows) {
+		if notificationErr != nil {
 			log.Printf("load follow request notification: %v", notificationErr)
-		} else if notificationErr == nil && notification.ID != previousNotificationID {
+		} else {
 			app.deliverNotification(notification)
 		}
+	} else {
+		// public profile: no request needed, just tell them they have a new follower
+		app.notify(targetID, followerID, "requests", "new_follower", app.userFullName(followerID)+" started following you", nil)
 	}
 
 	helpers.WriteJson(w, http.StatusOK, map[string]any{
@@ -328,6 +355,10 @@ func (app *App) CancelRequest(w http.ResponseWriter, r *http.Request) {
 			"message": "invalid target ID",
 		})
 		return
+	}
+	// an unfollow takes back the "started following you" alert too
+	if err := notifications.DeleteFromActor(app.DB, targetID, "requests", "new_follower", followerID, nil); err != nil {
+		log.Printf("remove new follower notification: %v", err)
 	}
 
 	helpers.WriteJson(w, http.StatusOK, map[string]any{
@@ -480,6 +511,10 @@ func (app *App) GetFollowers(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if !app.canSeeConnections(w, userID, targetID) {
+			return
+		}
+
 		followers, err := profiles.GetFollowers(app.DB, targetID, followerLimit, offset)
 		if err != nil {
 			log.Println(err)
@@ -581,6 +616,10 @@ func (app *App) GetFollowing(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if !app.canSeeConnections(w, userID, targetID) {
+			return
+		}
+
 		following, err := profiles.GetFollowing(app.DB, targetID, 20, offset)
 		if err != nil {
 			log.Println(err)
@@ -620,4 +659,42 @@ func (app *App) GetFollowing(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+}
+
+// canSeeConnections: the followers and following lists of a private profile are
+// only for the owner and their accepted followers, same as the rest of the profile
+func (app *App) canSeeConnections(w http.ResponseWriter, viewerID, targetID int) bool {
+	if viewerID == targetID {
+		return true
+	}
+
+	isPrivate, err := profiles.IsPrivate(app.DB, targetID)
+	if errors.Is(err, sql.ErrNoRows) {
+		helpers.WriteJson(w, http.StatusNotFound, map[string]any{
+			"status":  false,
+			"message": "no user found",
+		})
+		return false
+	}
+	if err != nil {
+		helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
+			"status":  false,
+			"message": "could not check profile privacy",
+		})
+		return false
+	}
+	if !isPrivate {
+		return true
+	}
+
+	status, err := profiles.CheckFollower(app.DB, viewerID, targetID)
+	if err == nil && status == 1 {
+		return true
+	}
+
+	helpers.WriteJson(w, http.StatusForbidden, map[string]any{
+		"status":  false,
+		"message": "this profile is private",
+	})
+	return false
 }

@@ -175,7 +175,7 @@ func searchPosts(db *sql.DB, currentUserID int, pattern string) ([]map[string]an
 		SELECT
 			posts.id,
 			posts.user_id,
-			COALESCE(users.username, users.first_name || ' ' || users.last_name),
+			users.first_name || ' ' || users.last_name,
 			COALESCE(profile.avatar_path, ''),
 			posts.content,
 			posts.image_path,

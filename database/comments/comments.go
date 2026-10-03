@@ -170,7 +170,7 @@ const commentQuery = `
 		comments.id,
 		comments.post_id,
 		comments.user_id,
-		COALESCE(users.username, users.first_name || ' ' || users.last_name),
+		users.first_name || ' ' || users.last_name,
 		COALESCE(profile.avatar_path, ''),
 		comments.content,
 		comments.image_path,

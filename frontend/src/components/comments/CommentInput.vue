@@ -213,7 +213,9 @@ function submitComment() {
   stroke-width: 1.8;
 }
 
-.file-input {
+/* stronger than ".comment-input__row input" so the hidden picker stays 1px
+   (it used to take the full width and make the whole page scroll sideways) */
+.comment-input__row .file-input {
   position: absolute;
   width: 1px;
   height: 1px;

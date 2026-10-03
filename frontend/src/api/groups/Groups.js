@@ -36,7 +36,8 @@ export async function createGroupApi(groupData) {
   }
 
   if (!response.ok) {
-    throw new Error("Error: Could not create a new group");
+    const result = await response.json().catch(() => null);
+    throw new Error(result?.message || "Could not create the group");
   }
 
   const result = await response.json();
@@ -102,7 +103,8 @@ export async function groupJoinRequest(groupID) {
   }
 
   if (!response.ok) {
-    throw new Error("Error: Could not create a group join request");
+    const result = await response.json().catch(() => null);
+    throw new Error(result?.message || "Could not send the join request");
   }
 
   const result = await response.json();
@@ -235,5 +237,21 @@ export function removeEventRSVP(groupID, eventID) {
 export function deleteGroupEvent(groupID, eventID) {
   return groupContentRequest(`/api/groups/${groupID}/events/${eventID}`, {
     method: "DELETE",
+  });
+}
+
+// leave a group i am a member of (not for the creator)
+export function leaveGroupApi(groupID) {
+  return groupContentRequest(`/api/groups/${groupID}/members/me`, {
+    method: "DELETE",
+  });
+}
+
+// answer an invitation from the group page: action is "join" or "decline"
+export function answerGroupInvitation(groupID, action) {
+  return groupContentRequest(`/api/groups/${groupID}/invitation`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action }),
   });
 }

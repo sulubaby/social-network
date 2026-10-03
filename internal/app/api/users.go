@@ -156,7 +156,8 @@ func (app *App) UpdateUserInfo(w http.ResponseWriter, r *http.Request) {
 		userData.Password = hashedPassword
 	}
 
-	if err := users.UpdateUserInfo(app.DB, userID, &userData); err != nil {
+	acceptedFollowers, err := users.UpdateUserInfo(app.DB, userID, &userData)
+	if err != nil {
 		log.Println(err)
 
 		status, message := helpers.NormalizeSQLError(err)
@@ -166,6 +167,20 @@ func (app *App) UpdateUserInfo(w http.ResponseWriter, r *http.Request) {
 			"message": message,
 		})
 		return
+	}
+
+	// going public accepted everyone who was waiting, let them know
+	if len(acceptedFollowers) > 0 {
+		name := app.userFullName(userID)
+		for _, followerID := range acceptedFollowers {
+			if _, err := app.DB.Exec(`
+				UPDATE notifications SET is_read = 1
+				WHERE user_id = ? AND actor_id = ? AND category = 'requests' AND type = 'follow_request'
+			`, userID, followerID); err != nil {
+				log.Println(err)
+			}
+			app.notify(followerID, userID, "requests", "follow_accepted", name+" accepted your follow request", nil)
+		}
 	}
 
 	helpers.WriteJson(w, http.StatusOK, map[string]any{
@@ -356,7 +371,18 @@ func (app *App) UpdateUserAbout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Println(userAbout.Intrests)
+	// every about field is a short text (the columns are 200 characters)
+	for _, value := range []string{userAbout.Work, userAbout.Hobbies, userAbout.Education, userAbout.Intrests,
+		userAbout.Travel, userAbout.Website, userAbout.Linkedin, userAbout.Instgram, userAbout.Twitter} {
+		if len([]rune(value)) > 200 {
+			helpers.WriteJson(w, http.StatusBadRequest, map[string]any{
+				"status":  false,
+				"message": "each field can have up to 200 characters",
+			})
+			return
+		}
+	}
+
 	if err := profiles.UpdateUserAbout(app.DB, userID, &userAbout); err != nil {
 		log.Println(err)
 		helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
@@ -367,7 +393,7 @@ func (app *App) UpdateUserAbout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	helpers.WriteJson(w, http.StatusOK, map[string]any{
-		"status":  false,
+		"status":  true,
 		"message": "user updated!",
 	})
 }
@@ -474,7 +500,11 @@ func (app *App) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err := users.DeleteUser(app.DB, userID)
+	if err == nil && app.Realtime != nil {
+		app.Realtime.DisconnectUser(userID)
+	}
 	if err != nil {
+		log.Println(err)
 		helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
 			"status":  false,
 			"message": "could not delete user",

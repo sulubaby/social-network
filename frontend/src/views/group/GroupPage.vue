@@ -8,6 +8,8 @@ import {
     getGroupPosts,
     groupJoinRequest,
     undoJoinGroup,
+    leaveGroupApi,
+    answerGroupInvitation,
 } from '@/api/groups/Groups.js'
 import AuthenticatedLayout from '@/components/layout/AuthenticatedLayout.vue'
 import GroupActivity from '@/components/groups/GroupActivity.vue'
@@ -15,6 +17,7 @@ import GroupPostCard from '@/components/groups/GroupPostCard.vue'
 import GroupPostComposer from '@/components/groups/GroupPostComposer.vue'
 import IconGlyph from '@/components/layout/IconGlyph.vue'
 import GroupChat from '@/components/chat/GroupChat.vue'
+import { addNotification } from '@/data/notifications.js'
 
 const route = useRoute()
 const groupId = route.params.groupId
@@ -28,6 +31,8 @@ const deleteError = ref('')
 const isJoinPending = ref(false)
 const joinError = ref('')
 const activeSection = ref('overview')
+const isLeaving = ref(false)
+const isAnsweringInvite = ref(false)
 
 // group posts paging: 20 at a time, the next page loads when the empty div
 // at the bottom of the list gets close to the screen
@@ -45,13 +50,18 @@ const groupSections = [
     { id: 'posts', label: 'Posts', icon: 'image' },
 ]
 
-onMounted(async () => {
+// the sections a link can open directly, like ?section=chat from a message popup
+const requestedSection = groupSections.some(section => section.id === route.query.section)
+    ? route.query.section
+    : ''
+
+async function loadGroup() {
     try {
         const result = await getGroup(groupId)
 
         group.value = result.group
         if (group.value?.isMember) {
-            activeSection.value = 'posts'
+            activeSection.value = requestedSection || 'posts'
             await loadGroupPosts()
         }
     } catch (err) {
@@ -63,8 +73,11 @@ onMounted(async () => {
 
     // the sentinel only exists after the page finished loading
     await nextTick()
+    postsObserver?.disconnect()
     observePostsEnd()
-})
+}
+
+onMounted(loadGroup)
 
 onBeforeUnmount(() => postsObserver?.disconnect())
 
@@ -130,6 +143,45 @@ function addGroupPost(post) {
 function removeGroupPost(postId) {
     groupPosts.value = groupPosts.value.filter((post) => post.id !== postId)
     groupPostsOffset.value = Math.max(0, groupPostsOffset.value - 1)
+}
+
+// leaving: the creator cannot leave (they delete the group instead)
+async function leaveGroup() {
+    if (isLeaving.value || !window.confirm('Leave this group? You will need to be accepted again to come back.')) return
+
+    isLeaving.value = true
+    joinError.value = ''
+    try {
+        await leaveGroupApi(groupId)
+        addNotification(`You left ${group.value.title}`)
+        router.replace('/groups')
+    } catch (err) {
+        joinError.value = err.message || 'Could not leave the group.'
+    } finally {
+        isLeaving.value = false
+    }
+}
+
+// someone invited me: join or decline right here
+async function answerInvitation(action) {
+    if (isAnsweringInvite.value) return
+
+    isAnsweringInvite.value = true
+    joinError.value = ''
+    try {
+        await answerGroupInvitation(groupId, action)
+        if (action === 'join') {
+            addNotification(`Welcome to ${group.value.title}`)
+            loading.value = true
+            await loadGroup()
+        } else {
+            group.value.invitationId = null
+        }
+    } catch (err) {
+        joinError.value = err.message || 'Could not answer the invitation.'
+    } finally {
+        isAnsweringInvite.value = false
+    }
 }
 
 async function toggleJoinRequest() {
@@ -198,8 +250,22 @@ async function toggleJoinRequest() {
                     </div>
 
                     <div class="group-header__aside">
+                        <template v-if="!group.isMember && group.invitationId">
+                            <p class="group-header__member-state">
+                                <IconGlyph name="groups" :size="17" />
+                                You were invited to this group
+                            </p>
+                            <button class="group-header__join" type="button" :disabled="isAnsweringInvite" @click="answerInvitation('join')">
+                                <span>{{ isAnsweringInvite ? 'Joining...' : 'Accept invitation' }}</span>
+                                <IconGlyph name="check" :size="17" />
+                            </button>
+                            <button class="group-header__delete" type="button" :disabled="isAnsweringInvite" @click="answerInvitation('decline')">
+                                Decline
+                            </button>
+                        </template>
+
                         <button
-                            v-if="!group.isMember"
+                            v-else-if="!group.isMember"
                             class="group-header__join"
                             type="button"
                             :disabled="isJoinPending"
@@ -216,6 +282,9 @@ async function toggleJoinRequest() {
 
                         <button v-if="group.isCreator" class="group-header__delete" :disabled="isDeletingGroup" @click="deleteGroup">
                             {{ isDeletingGroup ? 'Deleting...' : 'Delete group' }}
+                        </button>
+                        <button v-else-if="group.isMember" class="group-header__delete" type="button" :disabled="isLeaving" @click="leaveGroup">
+                            {{ isLeaving ? 'Leaving...' : 'Leave group' }}
                         </button>
                     </div>
                     <p v-if="joinError || deleteError" class="group-header__error" role="alert">{{ joinError || deleteError }}</p>

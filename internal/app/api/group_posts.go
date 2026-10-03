@@ -137,6 +137,12 @@ func (app App) CreateGroupPostComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	comment.IsOwner = true
+
+	var ownerID int
+	if err := app.DB.QueryRow(`SELECT user_id FROM group_posts WHERE id = ?`, postID).Scan(&ownerID); err == nil {
+		app.notify(ownerID, userID, "groups", "group_post_comment", app.userFullName(userID)+" commented on your post in "+app.groupTitle(groupID), int64Ptr(groupID))
+	}
+
 	writeJSON(w, http.StatusCreated, map[string]any{"status": true, "comment": comment})
 }
 

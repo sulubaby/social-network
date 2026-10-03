@@ -23,10 +23,11 @@ Returns:
 func GetUserID(db *sql.DB, identifier string) int {
 	var id int
 
+	// emails and usernames are saved in lower case, so the login is not case sensitive
 	err := db.QueryRow(`
 		SELECT id
 		FROM user
-		WHERE username = ? OR email = ?
+		WHERE username = LOWER(?) OR email = LOWER(?)
 	`, identifier, identifier).Scan(&id)
 
 	if err != nil {
@@ -182,24 +183,64 @@ Returns:
 	-> nil if successful
 	-> Error if the user or profile cannot be updated
 */
-func UpdateUserInfo(db *sql.DB, userID int, userData *models.UserRegistration) error {
-	_, err := db.Exec(`
+func UpdateUserInfo(db *sql.DB, userID int, userData *models.UserRegistration) ([]int, error) {
+	tx, err := db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec(`
 		UPDATE user
-		SET first_name = ?, last_name = ?, email = ?, username = ?
+		SET first_name = ?, last_name = ?, email = ?, username = NULLIF(?, ''), updated_at = CURRENT_TIMESTAMP
 		WHERE id = ?
 	`, userData.FirstName, userData.LastName, userData.Email, userData.UserName, userID)
-
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	_, err = db.Exec(`
+	// the password only changes when a new one was typed (it is already hashed here)
+	if userData.Password != "" {
+		if _, err = tx.Exec(`UPDATE user SET password = ? WHERE id = ?`, userData.Password, userID); err != nil {
+			return nil, err
+		}
+	}
+
+	_, err = tx.Exec(`
 		UPDATE profile
 		SET about = ?, is_private = ?
 		WHERE user_id = ?
 	`, userData.About, userData.IsPrivate, userID)
+	if err != nil {
+		return nil, err
+	}
 
-	return err
+	// a public profile has no follow requests, everyone who was waiting is accepted
+	var accepted []int
+	if userData.IsPrivate == 0 {
+		rows, err := tx.Query(`SELECT follower_id FROM user_followers WHERE target_id = ? AND status = 0`, userID)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var followerID int
+			if err := rows.Scan(&followerID); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			accepted = append(accepted, followerID)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+
+		if _, err = tx.Exec(`UPDATE user_followers SET status = 1 WHERE target_id = ? AND status = 0`, userID); err != nil {
+			return nil, err
+		}
+	}
+
+	return accepted, tx.Commit()
 }
 
 /*
@@ -335,15 +376,37 @@ func DeleteUser(db *sql.DB, userID int) error {
 		return err
 	}
 
-	if avatar != "avatars/default.png" {
-		if err := helpers.DeleteAvatar(avatar); err != nil {
-			return err
-		}
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// follows have no foreign key, remove them here so the other people's
+	// follower and following numbers go down (the triggers do that)
+	if _, err := tx.Exec(`DELETE FROM user_followers WHERE follower_id = ? OR target_id = ?`, userID, userID); err != nil {
+		return err
 	}
 
-	_, err := db.Exec(`DELETE FROM user WHERE id = ?`, userID)
+	// groups i created cannot live without their owner
+	if _, err := tx.Exec(`DELETE FROM groups WHERE creator_id = ?`, userID); err != nil {
+		return err
+	}
 
-	return err
+	if _, err := tx.Exec(`DELETE FROM user WHERE id = ?`, userID); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	// the account is gone, a missing avatar file should not matter anymore
+	if avatar != "avatars/default.png" {
+		_ = helpers.DeleteAvatar(avatar)
+	}
+
+	return nil
 }
 
 /*

@@ -4,7 +4,8 @@ import AuthenticatedLayout from '@/components/layout/AuthenticatedLayout.vue'
 import IconGlyph from '@/components/layout/IconGlyph.vue'
 import { THEMES, currentTheme, setTheme } from '@/helpers/theme.js'
 import { addNotification } from '@/data/notifications.js'
-import { router } from '@/router/router'
+import { forgetSession, router } from '@/router/router'
+import { disconnectRealtime } from '@/services/realtime.js'
 
 const showDeleteDialog = ref(false)
 const confirmText = ref('')
@@ -38,19 +39,20 @@ async function confirmDelete() {
       credentials: 'include'
     })
 
-    const result = await resp.json();
-    if (!resp.ok || !result.status) {
-      addNotification('failed to delete account' || result.message, 'error')
+    const result = await resp.json().catch(() => null)
+    if (!resp.ok || !result?.status) {
+      addNotification(result?.message || 'Failed to delete account', 'error')
       return
     }
 
-    if (result.status) {
-      router.push("/login")
-    }
+    // the account and its cookie are gone, close the live connection too
+    disconnectRealtime()
+    forgetSession()
+    addNotification('Your account was deleted.')
+    router.replace("/login")
   } catch (err) {
-    addNotification('failed to delete account' || err.message, 'error')
+    addNotification(err.message || 'Failed to delete account', 'error')
   }
-  addNotification('Delete account is a front end preview only. Nothing was deleted.')
 }
 
 function onKeydown(event) {

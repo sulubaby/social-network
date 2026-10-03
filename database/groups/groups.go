@@ -11,33 +11,33 @@ var (
 )
 
 // AcceptInvitation accepts one specific pending invitation. If the group has
-// a chat, the same user is added there too.
-func AcceptInvitation(db *sql.DB, userID int, invitationID int64) error {
+// a chat, the same user is added there too. It gives back the group and the
+// person who sent the invitation so they can be told.
+func AcceptInvitation(db *sql.DB, userID int, invitationID int64) (groupID int64, inviterID int, err error) {
 	if userID <= 0 || invitationID <= 0 {
-		return ErrInvitationNotFound
+		return 0, 0, ErrInvitationNotFound
 	}
 
 	tx, err := db.Begin()
 	if err != nil {
-		return err
+		return 0, 0, err
 	}
 	defer tx.Rollback()
 
-	var groupID int64
 	err = tx.QueryRow(`
-		SELECT group_id
+		SELECT group_id, inviter_id
 		FROM group_invitations
 		WHERE id = ?
 		  AND user_id = ?
 		  AND status = 'pending'
-	`, invitationID, userID).Scan(&groupID)
+	`, invitationID, userID).Scan(&groupID, &inviterID)
 
 	if errors.Is(err, sql.ErrNoRows) {
-		return ErrInvitationNotFound
+		return 0, 0, ErrInvitationNotFound
 	}
 
 	if err != nil {
-		return err
+		return 0, 0, err
 	}
 
 	result, err := tx.Exec(`
@@ -49,16 +49,25 @@ func AcceptInvitation(db *sql.DB, userID int, invitationID int64) error {
 	`, invitationID, userID)
 
 	if err != nil {
-		return err
+		return 0, 0, err
 	}
 
 	affected, err := result.RowsAffected()
 	if err != nil {
-		return err
+		return 0, 0, err
 	}
 
 	if affected == 0 {
-		return ErrInvitationNotFound
+		return 0, 0, ErrInvitationNotFound
+	}
+
+	// joining through an invitation also answers my own pending join request
+	if _, err = tx.Exec(`
+		UPDATE group_join_requests
+		SET status = 'accepted'
+		WHERE group_id = ? AND user_id = ? AND status = 'pending'
+	`, groupID, userID); err != nil {
+		return 0, 0, err
 	}
 
 	// Add user as group member
@@ -68,7 +77,7 @@ func AcceptInvitation(db *sql.DB, userID int, invitationID int64) error {
 	`, groupID, userID)
 
 	if err != nil {
-		return err
+		return 0, 0, err
 	}
 
 	// Find group chat
@@ -83,11 +92,11 @@ func AcceptInvitation(db *sql.DB, userID int, invitationID int64) error {
 	`, groupID).Scan(&chatID)
 
 	if err == sql.ErrNoRows {
-		return tx.Commit()
+		return groupID, inviterID, tx.Commit()
 	}
 
 	if err != nil {
-		return err
+		return 0, 0, err
 	}
 
 	// Add member to group chat
@@ -97,10 +106,10 @@ func AcceptInvitation(db *sql.DB, userID int, invitationID int64) error {
 	`, userID, chatID)
 
 	if err != nil {
-		return err
+		return 0, 0, err
 	}
 
-	return tx.Commit()
+	return groupID, inviterID, tx.Commit()
 }
 
 func DeclineInvitation(db *sql.DB, userID int, invitationID int64) error {
@@ -188,6 +197,15 @@ func AcceptJoinRequest(db *sql.DB, creatorID int, requesterID int, groupID int64
 		return err
 	}
 
+	// any invitation still waiting for this person is answered now too
+	if _, err = tx.Exec(`
+		UPDATE group_invitations
+		SET status = 'accepted'
+		WHERE group_id = ? AND user_id = ? AND status = 'pending'
+	`, groupID, requesterID); err != nil {
+		return err
+	}
+
 	return tx.Commit()
 }
 
@@ -231,4 +249,57 @@ func RejectJoinRequest(db *sql.DB, creatorID int, requesterID int, groupID int64
 	}
 
 	return nil
+}
+
+// LeaveGroup removes a member from a group. The creator owns the group, so they
+// delete it instead of leaving it.
+var ErrCreatorCannotLeave = errors.New("the group creator cannot leave, delete the group instead")
+var ErrNotMember = errors.New("you are not a member of this group")
+
+func LeaveGroup(db *sql.DB, userID int, groupID int64) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var creatorID int
+	err = tx.QueryRow(`SELECT creator_id FROM groups WHERE id = ?`, groupID).Scan(&creatorID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrGroupNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if creatorID == userID {
+		return ErrCreatorCannotLeave
+	}
+
+	result, err := tx.Exec(`DELETE FROM group_members WHERE group_id = ? AND user_id = ?`, groupID, userID)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrNotMember
+	}
+
+	// leave the group chat and drop my answers to its events
+	if _, err = tx.Exec(`
+		DELETE FROM chat_users
+		WHERE user_id = ? AND chat_id IN (SELECT id FROM chats WHERE type = 'group' AND group_id = ?)
+	`, userID, groupID); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(`
+		DELETE FROM event_rsvps
+		WHERE user_id = ? AND event_id IN (SELECT id FROM events WHERE group_id = ?)
+	`, userID, groupID); err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }

@@ -84,7 +84,7 @@ func ListPrivateChats(db *sql.DB, userID int) ([]models.ChatConversation, error)
 			u.last_name,
 			COALESCE(p.avatar_path, ''),
 			COALESCE(last_message.content, ''),
-			COALESCE(last_message.created_at, '')
+			COALESCE(strftime('%Y-%m-%dT%H:%M:%SZ', last_message.created_at), '')
 		FROM chats c
 		JOIN user u ON u.id = CASE
 			WHEN c.private_user_low_id = ? THEN c.private_user_high_id
@@ -542,7 +542,7 @@ func getPrivateConversation(db *sql.DB, chatID int64, userID int) (models.ChatCo
 			u.last_name,
 			COALESCE(p.avatar_path, ''),
 			COALESCE(last_message.content, ''),
-			COALESCE(last_message.created_at, '')
+			COALESCE(strftime('%Y-%m-%dT%H:%M:%SZ', last_message.created_at), '')
 		FROM chats c
 		JOIN user u ON u.id = CASE
 			WHEN c.private_user_low_id = ? THEN c.private_user_high_id

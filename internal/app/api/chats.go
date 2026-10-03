@@ -132,15 +132,7 @@ func (app *App) notifyPrivateMessage(chatID int64, senderID int, message models.
 	if senderName == "" {
 		senderName = "Someone"
 	}
-	actorID := senderID
-	relatedID := chatID
-	notification, err := notifications.Create(app.DB, recipientID, models.CreateNotificationRequest{
-		ActorID:   &actorID,
-		Category:  "messages",
-		Type:      "new_message",
-		Message:   senderName + " sent you a message",
-		RelatedID: &relatedID,
-	})
+	notification, err := notifications.UpsertMessage(app.DB, recipientID, senderID, chatID, senderName+": "+messagePreview(message.Content))
 	if err != nil {
 		// A notification failure should not make a successfully sent message look failed.
 		log.Printf("create private message notification: %v", err)
@@ -177,6 +169,15 @@ func (app App) GroupChatMessages(w http.ResponseWriter, r *http.Request) {
 		"hasMore":    hasMore,
 		"nextOffset": page.Offset + len(messages),
 	})
+}
+
+// messagePreview keeps the notification text short
+func messagePreview(content string) string {
+	runes := []rune(strings.TrimSpace(content))
+	if len(runes) > 80 {
+		return string(runes[:80]) + "..."
+	}
+	return string(runes)
 }
 
 func parseChatPathID(r *http.Request, key string) (int64, error) {

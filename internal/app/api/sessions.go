@@ -96,9 +96,13 @@ func (app *App) LoggingUser(w http.ResponseWriter, r *http.Request) {
 		Name:     "token",
 		Value:    token,
 		Path:     "/",
-		Expires:  time.Now().Add(24 * 30 * time.Hour),
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
+	}
+	// "keep me signed in" keeps the cookie for 30 days, without it the cookie
+	// is gone when the browser closes (the token itself still expires on its own)
+	if logger.Remember == nil || *logger.Remember {
+		cookie.Expires = time.Now().Add(24 * 30 * time.Hour)
 	}
 
 	http.SetCookie(w, &cookie)
@@ -151,10 +155,12 @@ func (app *App) DeleteSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.SetCookie(w, &http.Cookie{
-		Name:   "token",
-		Value:  "",
-		MaxAge: -1,
-		Path:   "/",
+		Name:     "token",
+		Value:    "",
+		MaxAge:   -1,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
 	})
 
 	helpers.WriteJson(w, http.StatusOK, map[string]any{

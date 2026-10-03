@@ -41,7 +41,7 @@ func ValidateUpdateInfo(userData *models.UserRegistration) error {
 	}
 
 	if err := validateAbout(&userData.About); err != nil {
-		return nil
+		return err
 	}
 
 	if userData.IsPrivate != 1 && userData.IsPrivate != 0 {

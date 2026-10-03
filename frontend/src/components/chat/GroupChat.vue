@@ -3,7 +3,7 @@ import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { getGroupMessages } from '@/api/chats.js'
 import IconGlyph from '@/components/layout/IconGlyph.vue'
 import { appendUniqueMessage, normalizeChatMessage, normalizeChatMessages } from '@/helpers/chatMessages.js'
-import { sendChatMessage, subscribeRealtime } from '@/services/realtime.js'
+import { sendChatMessage, setOpenChat, subscribeRealtime } from '@/services/realtime.js'
 import { useChatTyping } from '@/helpers/useChatTyping.js'
 import MessageComposer from './MessageComposer.vue'
 import MessageThread from './MessageThread.vue'
@@ -41,6 +41,11 @@ async function scrollInitialHistory() {
 watch(() => props.active, active => {
   if (active) void scrollInitialHistory()
 })
+
+// while the group chat tab is on screen its messages should not pop up
+watch([() => props.active, chatId], ([active, id]) => {
+  setOpenChat(active && id ? id : null)
+}, { immediate: true })
 
 function handleRealtimeMessage(event) {
   const message = normalizeChatMessage(event)
@@ -83,6 +88,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  if (props.active) setOpenChat(null)
   stopMessageListener?.()
   stopErrorListener?.()
   stopConnectionListener?.()

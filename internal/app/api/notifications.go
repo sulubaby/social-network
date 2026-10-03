@@ -265,12 +265,16 @@ func (app App) applyNotificationAction(userID int, notification models.Notificat
 
 		switch action {
 		case "accept":
-			return profiles.DecideFollowRequest(
+			if err := profiles.DecideFollowRequest(
 				app.DB,
 				userID,
 				*notification.ActorID,
 				true,
-			)
+			); err != nil {
+				return err
+			}
+			app.notify(*notification.ActorID, userID, "requests", "follow_accepted", app.userFullName(userID)+" accepted your follow request", nil)
+			return nil
 
 		case "decline":
 			return profiles.DecideFollowRequest(
@@ -312,20 +316,28 @@ func (app App) applyNotificationAction(userID int, notification models.Notificat
 
 			switch action {
 			case "accept":
-				return groups.AcceptJoinRequest(
+				if err := groups.AcceptJoinRequest(
 					app.DB,
 					userID,
 					*notification.ActorID,
 					groupID,
-				)
+				); err != nil {
+					return err
+				}
+				app.notify(*notification.ActorID, userID, "groups", "join_accepted", "Your request to join "+app.groupTitle(groupID)+" was accepted", int64Ptr(groupID))
+				return nil
 
 			case "reject":
-				return groups.RejectJoinRequest(
+				if err := groups.RejectJoinRequest(
 					app.DB,
 					userID,
 					*notification.ActorID,
 					groupID,
-				)
+				); err != nil {
+					return err
+				}
+				app.notify(*notification.ActorID, userID, "groups", "join_rejected", "Your request to join "+app.groupTitle(groupID)+" was declined", int64Ptr(groupID))
+				return nil
 
 			default:
 				return errors.New(
@@ -337,11 +349,16 @@ func (app App) applyNotificationAction(userID int, notification models.Notificat
 		case "invitation":
 			switch action {
 			case "join":
-				return groups.AcceptInvitation(
+				groupID, inviterID, err := groups.AcceptInvitation(
 					app.DB,
 					userID,
 					*notification.RelatedID,
 				)
+				if err != nil {
+					return err
+				}
+				app.notify(inviterID, userID, "groups", "invitation_accepted", app.userFullName(userID)+" accepted your invitation to "+app.groupTitle(groupID), int64Ptr(groupID))
+				return nil
 
 			case "decline":
 				return groups.DeclineInvitation(
