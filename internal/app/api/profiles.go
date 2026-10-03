@@ -2,6 +2,7 @@ package api
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
@@ -697,4 +698,77 @@ func (app *App) canSeeConnections(w http.ResponseWriter, viewerID, targetID int)
 		"message": "this profile is private",
 	})
 	return false
+}
+
+/*
+Handler used to switch my own profile between public and private.
+
+Method:
+
+	PATCH
+
+-> body: {"isPrivate": true} or {"isPrivate": false}
+
+-> going public accepts every waiting follow request
+
+-> in case of success a respond will be written back
+  - status must be true
+  - isPrivate boolean (the new value)
+*/
+func (app *App) UpdateProfilePrivacy(w http.ResponseWriter, r *http.Request) {
+	userID, ok := r.Context().Value("userID").(int)
+	if !ok {
+		helpers.WriteJson(w, http.StatusUnauthorized, map[string]any{
+			"status":  false,
+			"message": "could not authorize user",
+		})
+		return
+	}
+
+	var input struct {
+		IsPrivate *bool `json:"isPrivate"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024)).Decode(&input); err != nil || input.IsPrivate == nil {
+		helpers.WriteJson(w, http.StatusBadRequest, map[string]any{
+			"status":  false,
+			"message": "isPrivate must be true or false",
+		})
+		return
+	}
+
+	value := 0
+	if *input.IsPrivate {
+		value = 1
+	}
+	if _, err := app.DB.Exec(`UPDATE profile SET is_private = ? WHERE user_id = ?`, value, userID); err != nil {
+		log.Println(err)
+		helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
+			"status":  false,
+			"message": "could not change profile privacy",
+		})
+		return
+	}
+
+	if !*input.IsPrivate {
+		app.acceptPendingFollowRequests(userID)
+	}
+
+	helpers.WriteJson(w, http.StatusOK, map[string]any{
+		"status":    true,
+		"isPrivate": *input.IsPrivate,
+	})
+}
+
+// acceptPendingFollowRequests turns the waiting requests into followers
+// (the profile just went public) and tells each of them
+func (app *App) acceptPendingFollowRequests(userID int) {
+	accepted, err := users.AcceptPendingRequests(app.DB, userID)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	name := app.userFullName(userID)
+	for _, followerID := range accepted {
+		app.notify(followerID, userID, "requests", "follow_accepted", name+" accepted your follow request", nil)
+	}
 }

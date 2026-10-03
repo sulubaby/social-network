@@ -115,7 +115,7 @@ func (app App) GetGroupPostComments(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// CreateGroupPostComment handles POST on the same url. group comments are text only
+// CreateGroupPostComment handles POST on the same url. a comment can have text, a picture or both
 func (app App) CreateGroupPostComment(w http.ResponseWriter, r *http.Request) {
 	userID, groupID, postID, ok := groupPostRequestIdentity(w, r)
 	if !ok || !app.requireGroupMember(w, groupID, userID) {
@@ -125,14 +125,36 @@ func (app App) CreateGroupPostComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	content, err := parseTextComment(w, r)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"status": false, "message": err.Error()})
-		return
+	// a comment with a picture comes as a form, a text only comment comes as json
+	content := ""
+	imagePath := ""
+	if strings.HasPrefix(strings.ToLower(r.Header.Get("Content-Type")), "multipart/form-data") {
+		form, err := parseGroupContentForm(w, r, maxCommentMultipartSize, maxCommentImageSize, 200, "comment")
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"status": false, "message": err.Error()})
+			return
+		}
+		content = form.content
+		if form.file != nil {
+			defer form.file.Close()
+			imagePath, err = helpers.SaveUploads(form.file, form.header, "comment")
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]any{"status": false, "message": "could not save comment image"})
+				return
+			}
+		}
+	} else {
+		text, err := parseTextComment(w, r)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"status": false, "message": err.Error()})
+			return
+		}
+		content = text
 	}
 
-	comment, err := groupposts.CreateComment(app.DB, postID, userID, content, "")
+	comment, err := groupposts.CreateComment(app.DB, postID, userID, content, imagePath)
 	if err != nil {
+		helpers.DeleteUpload(imagePath)
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"status": false, "message": "could not create group post comment"})
 		return
 	}
@@ -317,10 +339,6 @@ func parseGroupContentForm(w http.ResponseWriter, r *http.Request, maxBody, maxI
 // parseTextComment reads a json comment like {"content": "..."}
 // and makes sure its 1 to 200 characters
 func parseTextComment(w http.ResponseWriter, r *http.Request) (string, error) {
-	if strings.HasPrefix(strings.ToLower(r.Header.Get("Content-Type")), "multipart/form-data") {
-		return "", errors.New("comment images are not supported; send text only")
-	}
-
 	var input struct {
 		Content string `json:"content"`
 	}

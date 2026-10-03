@@ -170,7 +170,18 @@ export function getGroupPostComments(groupID, postID, { limit = 20, offset = 0 }
   return groupContentRequest(`/api/groups/${groupID}/posts/${postID}/comments?${params}`);
 }
 
-export function createGroupPostComment(groupID, postID, content) {
+// a comment with a picture is sent as a form, text only as json
+export function createGroupPostComment(groupID, postID, content, image = null) {
+  if (image) {
+    const form = new FormData();
+    form.append("content", content);
+    form.append("image", image);
+    return groupContentRequest(`/api/groups/${groupID}/posts/${postID}/comments`, {
+      method: "POST",
+      body: form,
+    });
+  }
+
   return groupContentRequest(`/api/groups/${groupID}/posts/${postID}/comments`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

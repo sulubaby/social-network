@@ -34,6 +34,7 @@ func StartServer(db *sql.DB) *http.ServeMux {
 	mux.HandleFunc("GET /api/profile/about", app.AuthMiddleware(app.GetUserAbout))
 	mux.HandleFunc("PATCH /api/profile/about", app.AuthMiddleware(app.UpdateUserAbout))
 	mux.HandleFunc("GET /api/profile", app.AuthMiddleware(app.GetUserProfile))
+	mux.HandleFunc("PATCH /api/profile/privacy", app.AuthMiddleware(app.UpdateProfilePrivacy))
 	mux.HandleFunc("GET /api/friends/", app.AuthMiddleware(app.GetFriends))
 	
 	// searches
@@ -54,7 +55,7 @@ func StartServer(db *sql.DB) *http.ServeMux {
 	mux.HandleFunc("GET /api/posts", app.AuthMiddleware(app.ListPosts))
 	mux.HandleFunc("PUT /api/posts/{postID}/like", app.AuthMiddleware(app.LikePost))
 	mux.HandleFunc("DELETE /api/posts/{postID}/like", app.AuthMiddleware(app.LikePost))
-	mux.HandleFunc("/api/posts/{postID}/comments", app.Comments)
+	mux.HandleFunc("/api/posts/{postID}/comments", app.AuthMiddleware(app.Comments))
 	mux.HandleFunc("DELETE /api/posts/{postID}/comments/{commentID}", app.AuthMiddleware(app.DeleteComment))
 	mux.HandleFunc("DELETE /api/posts", app.AuthMiddleware(app.DeletePost))
 	

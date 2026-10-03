@@ -5,10 +5,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	server "social/cmd"
 	"social/cmd/server/routes"
 	"social/cmd/utils"
-	"social/internal/database"
+	"social/pkg/db/sqlite"
 	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -27,13 +26,13 @@ func main() {
 	if strings.Contains(path, "?") {
 		separator = "&"
 	}
-	db, err := server.ConnectToDB("sqlite3", path+separator+"_foreign_keys=on")
+	db, err := sqlite.ConnectToDB("sqlite3", path+separator+"_foreign_keys=on")
 	if err != nil {
 		log.Println(err)
 		return
 	}
 
-	err = database.RunMigrations()
+	err = sqlite.RunMigrations(path)
 	if err != nil {
 		log.Println(err)
 		return

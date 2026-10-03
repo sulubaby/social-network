@@ -19,7 +19,7 @@ type GroupPost struct {
 }
 
 // GroupPostComment is a comment on a group post.
-// ImagePath has json:"-" so the real file path never goes to the browser
+// the picture is only served to group members (see ServeUpload)
 type GroupPostComment struct {
 	ID         int64     `json:"id"`
 	PostID     int64     `json:"postId"`
@@ -29,7 +29,7 @@ type GroupPostComment struct {
 	LastName   string    `json:"lastName"`
 	AvatarPath string    `json:"avatarPath"`
 	Content    string    `json:"content"`
-	ImagePath  string    `json:"-"`
+	ImagePath  string    `json:"imagePath"`
 	CreatedAt  time.Time `json:"createdAt"`
 	IsOwner    bool      `json:"isOwner"`
 }

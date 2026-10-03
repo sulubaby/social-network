@@ -156,8 +156,7 @@ func (app *App) UpdateUserInfo(w http.ResponseWriter, r *http.Request) {
 		userData.Password = hashedPassword
 	}
 
-	acceptedFollowers, err := users.UpdateUserInfo(app.DB, userID, &userData)
-	if err != nil {
+	if err := users.UpdateUserInfo(app.DB, userID, &userData); err != nil {
 		log.Println(err)
 
 		status, message := helpers.NormalizeSQLError(err)
@@ -169,18 +168,9 @@ func (app *App) UpdateUserInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// going public accepted everyone who was waiting, let them know
-	if len(acceptedFollowers) > 0 {
-		name := app.userFullName(userID)
-		for _, followerID := range acceptedFollowers {
-			if _, err := app.DB.Exec(`
-				UPDATE notifications SET is_read = 1
-				WHERE user_id = ? AND actor_id = ? AND category = 'requests' AND type = 'follow_request'
-			`, userID, followerID); err != nil {
-				log.Println(err)
-			}
-			app.notify(followerID, userID, "requests", "follow_accepted", name+" accepted your follow request", nil)
-		}
+	// a public profile has no requests, accept everyone who was waiting
+	if userData.IsPrivate == 0 {
+		app.acceptPendingFollowRequests(userID)
 	}
 
 	helpers.WriteJson(w, http.StatusOK, map[string]any{

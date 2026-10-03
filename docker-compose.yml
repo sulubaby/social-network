@@ -7,8 +7,6 @@ services:
     restart: unless-stopped
     ports:
       - "4000:4000"
-    environment:
-      - ORBIT_TOKEN_SECRET=${ORBIT_TOKEN_SECRET:-change-me-in-production}
     volumes:
       - db-data:/app/db
       - uploads-data:/app/uploads

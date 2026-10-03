@@ -3,6 +3,8 @@
 import { onMounted, onUnmounted, ref } from 'vue'
 
 import { getUserData } from '@/api/users/personalProfile'
+import { updatePrivacy } from '@/api/users/editProfile.js'
+import { addNotification } from '@/data/notifications'
 import { getPosts } from '@/api/posts/posts.js'
 import { toProfileCardPost } from '@/helpers/profilePosts.js'
 import { profileData } from '@/data/usersData'
@@ -26,6 +28,22 @@ const offset = ref(0)
 const hasMore = ref(true)
 
 let throttleTimeout = null
+
+// the public / private switch on my profile, it asks first
+async function changePrivacy(makePrivate) {
+  const question = makePrivate
+    ? 'Make your profile private? Only your followers will see your posts and info, and new followers must send a request.'
+    : 'Make your profile public? Everyone will see your posts and info, and people waiting for you to accept them will become followers.'
+  if (!window.confirm(question)) return
+
+  try {
+    await updatePrivacy(makePrivate)
+    profileData.userInfo.isPrivate = makePrivate ? 1 : 0
+    addNotification(makePrivate ? 'Your profile is private now' : 'Your profile is public now', 'success')
+  } catch (err) {
+    addNotification(err.message || 'Could not change privacy', 'error')
+  }
+}
 
 async function loadPosts(loadMore = false) {
   if (loadMore) {
@@ -154,7 +172,8 @@ function removePost(postID) {
             : ''
             " :num-of-posts="profileData.numOfPosts" :num-of-following="profileData.numOfFollowing"
           :num-of-followers="profileData.numOfFollowers" :is-private="profileData.userInfo.isPrivate === 1" add-edit
-          @select-tab="activeTab = $event" :dob="profileData.userInfo.dob" />
+          @select-tab="activeTab = $event" :dob="profileData.userInfo.dob"
+          @privacy-change="changePrivacy" />
         
         <ProfileTabs v-model="activeTab" type="personal" />
 

@@ -211,6 +211,8 @@ func (app App) createComment(w http.ResponseWriter, r *http.Request, userID int,
 		return
 	}
 	if len([]rune(request.Content)) > 200 {
+		// the picture was already saved above, we dont need it anymore
+		helpers.DeleteUpload(imagePath)
 		writeJSON(w, http.StatusBadRequest, map[string]any{
 			"status":  false,
 			"message": "comment text must contain 1 to 200 characters",
@@ -220,6 +222,10 @@ func (app App) createComment(w http.ResponseWriter, r *http.Request, userID int,
 
 	// save it. this also checks i am allowed to see the post
 	comment, err := comments.CreateComment(app.DB, userID, postID, request.Content, imagePath)
+	if err != nil {
+		// the comment was not saved (post hidden or db error), so remove its picture
+		helpers.DeleteUpload(imagePath)
+	}
 	if errors.Is(err, comments.ErrPostNotVisible) {
 		writeJSON(w, http.StatusNotFound, map[string]any{
 			"status":  false,

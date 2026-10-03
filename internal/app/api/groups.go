@@ -351,10 +351,56 @@ func (app App) GetGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	members, err := listGroupMembers(app.DB, groupID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"status":  false,
+			"message": "failed to get group members",
+		})
+		return
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
-		"status": true,
-		"group":  group,
+		"status":  true,
+		"group":   group,
+		"members": members,
 	})
+}
+
+// listGroupMembers gives the people in a group, the creator first
+func listGroupMembers(db *sql.DB, groupID int64) ([]map[string]any, error) {
+	rows, err := db.Query(`
+		SELECT u.id, COALESCE(u.username, ''), u.first_name, u.last_name, COALESCE(p.avatar_path, ''), g.creator_id = u.id
+		FROM group_members gm
+		JOIN user u ON u.id = gm.user_id
+		JOIN groups g ON g.id = gm.group_id
+		LEFT JOIN profile p ON p.user_id = u.id
+		WHERE gm.group_id = ?
+		ORDER BY g.creator_id = u.id DESC, u.first_name, u.last_name
+	`, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	members := []map[string]any{}
+	for rows.Next() {
+		var id int
+		var username, firstName, lastName, avatar string
+		var isCreator bool
+		if err := rows.Scan(&id, &username, &firstName, &lastName, &avatar, &isCreator); err != nil {
+			return nil, err
+		}
+		members = append(members, map[string]any{
+			"id":         id,
+			"username":   username,
+			"firstName":  firstName,
+			"lastName":   lastName,
+			"avatarPath": avatar,
+			"isCreator":  isCreator,
+		})
+	}
+	return members, rows.Err()
 }
 
 func (app App) DeleteGroup(w http.ResponseWriter, r *http.Request) {

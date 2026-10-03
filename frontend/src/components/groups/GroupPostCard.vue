@@ -7,6 +7,7 @@ import {
   getGroupPostComments,
 } from '@/api/groups/Groups.js'
 import CommentMenu from '@/components/comments/CommentMenu.vue'
+import CommentInput from '@/components/comments/CommentInput.vue'
 import IconGlyph from '@/components/layout/IconGlyph.vue'
 
 // one post inside a group page. we need the group id for the api urls
@@ -35,7 +36,7 @@ const commentsOffset = ref(0)
 const commentsList = ref(null)
 const commentsSentinel = ref(null)
 const commentsError = ref('')
-const commentContent = ref('')
+const commentInput = ref(null)
 const isSubmittingComment = ref(false)
 const isDeletingPost = ref(false)
 const deletingCommentId = ref(null)
@@ -49,7 +50,6 @@ let commentsObserver
 
 // full name, or username if there is no name
 const authorName = computed(() => `${props.post.firstName || ''} ${props.post.lastName || ''}`.trim() || props.post.username || 'Group member')
-const canComment = computed(() => commentContent.value.trim() !== '')
 
 // builds the /uploads/ url for images
 function assetUrl(path) {
@@ -139,25 +139,20 @@ async function toggleComments() {
   observeCommentsEnd()
 }
 
-// clear the comment box after sending
-function clearCommentForm() {
-  commentContent.value = ''
-}
-
-// send a text comment and add it at the bottom
-async function submitComment() {
-  if (!canComment.value || isSubmittingComment.value) return
+// send a comment (text, picture or both) and add it at the bottom
+async function submitComment({ content, image }) {
+  if ((!content && !image) || isSubmittingComment.value) return
 
   isSubmittingComment.value = true
   commentsError.value = ''
   try {
-    const result = await createGroupPostComment(props.groupId, props.post.id, commentContent.value.trim())
+    const result = await createGroupPostComment(props.groupId, props.post.id, content, image)
     if (!result?.comment) throw new Error('Could not create comment')
 
     comments.value.push(result.comment)
     commentsLoaded.value = true
     localCommentCount.value += 1
-    clearCommentForm()
+    commentInput.value?.reset()
   } catch (err) {
     commentsError.value = err.message || 'Could not create comment.'
   } finally {
@@ -285,6 +280,7 @@ onBeforeUnmount(() => commentsObserver?.disconnect())
               />
             </div>
             <p v-if="comment.content">{{ comment.content }}</p>
+            <img v-if="comment.imagePath" class="group-comment__image" :src="assetUrl(comment.imagePath)" alt="Image attached to this comment" />
           </div>
         </div>
         <div ref="commentsSentinel" class="comments-sentinel" aria-hidden="true"></div>
@@ -295,16 +291,13 @@ onBeforeUnmount(() => commentsObserver?.disconnect())
         <button type="button" @click="retryComments">Try again</button>
       </div>
 
-      <!-- write a comment (text only in groups) -->
-      <form class="comment-form" @submit.prevent="submitComment">
-        <label class="visually-hidden" :for="`group-comment-${post.id}`">Write a comment</label>
-        <textarea :id="`group-comment-${post.id}`" v-model="commentContent" maxlength="200" rows="2" placeholder="Write a comment..."></textarea>
-        <div class="comment-form__actions">
-          <button class="comment-submit" type="submit" :disabled="!canComment || isSubmittingComment">
-            {{ isSubmittingComment ? 'Commenting...' : 'Comment' }}
-          </button>
-        </div>
-      </form>
+      <!-- write a comment, text and/or a picture like normal posts -->
+      <CommentInput
+        ref="commentInput"
+        :input-id="`group-comment-${post.id}`"
+        :disabled="isSubmittingComment"
+        @submit="submitComment"
+      />
     </section>
   </article>
 </template>
@@ -412,6 +405,15 @@ onBeforeUnmount(() => commentsObserver?.disconnect())
   line-height: 1.55;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+}
+
+.group-comment__image {
+  display: block;
+  max-width: min(100%, 16rem);
+  max-height: 14rem;
+  margin-top: var(--space-2);
+  border-radius: var(--radius-small);
+  object-fit: cover;
 }
 
 .group-post-card__image {

@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"social/database/posts"
-	"social/internal/app/tokens"
 	"social/internal/helpers"
 	"social/internal/models"
 	"strconv"
@@ -159,6 +158,10 @@ func (app App) CreatePost(w http.ResponseWriter, r *http.Request) {
 
 	// save the post in the database
 	post, err := posts.CreatePost(app.DB, userID, request)
+	if err != nil && request.ImagePath != "" {
+		// the post was not saved, so dont keep its picture on the disk
+		helpers.DeleteUpload(request.ImagePath)
+	}
 	if errors.Is(err, posts.ErrSelectedFollowersRequired) || errors.Is(err, posts.ErrInvalidPostViewer) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{
 			"status":  false,
@@ -253,22 +256,14 @@ func (app App) ListPosts(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// authenticatedUserID reads the token cookie and gives back the user id inside it
+// authenticatedUserID gives back the user id that AuthMiddleware put in the request
 func authenticatedUserID(r *http.Request) (int, error) {
-	cookie, err := r.Cookie("token")
-	if err != nil || cookie.Value == "" {
-		return 0, errors.New("missing authentication cookie")
+	userID, ok := r.Context().Value("userID").(int)
+	if !ok || userID <= 0 {
+		return 0, errors.New("missing authenticated user")
 	}
 
-	payload, err := tokens.VerifyToken(cookie.Value)
-	if err != nil {
-		return 0, err
-	}
-	if payload.UserID <= 0 {
-		return 0, errors.New("invalid authenticated user")
-	}
-
-	return payload.UserID, nil
+	return userID, nil
 }
 
 // writeJSON sends a json response with a status code
@@ -302,12 +297,25 @@ func (app *App) DeletePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := posts.DeletePost(app.DB, request.PostID, userID); err != nil {
+	imagePaths, err := posts.DeletePost(app.DB, request.PostID, userID)
+	if errors.Is(err, posts.ErrPostNotFound) {
+		helpers.WriteJson(w, http.StatusNotFound, map[string]any{
+			"status":  false,
+			"message": "post not found or it is not yours",
+		})
+		return
+	}
+	if err != nil {
 		helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
 			"status":  false,
 			"message": "could not delete post",
 		})
 		return
+	}
+
+	// the post is gone, remove its picture and the comment pictures from the disk too
+	for _, path := range imagePaths {
+		helpers.DeleteUpload(path)
 	}
 
 	helpers.WriteJson(w, http.StatusOK, map[string]any{

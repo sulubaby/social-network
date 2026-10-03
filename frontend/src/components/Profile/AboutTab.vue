@@ -9,8 +9,8 @@ const props = defineProps({
 
 const details = computed(() => [
   { label: 'Username', value: props.profile.userName ? `@${props.profile.userName}` : '' },
-  { label: 'Email', value: props.ownProfile ? props.profile.email : '' },
-  { label: 'Date of birth', value: props.ownProfile ? formatDate(props.profile.dob) : '' },
+  { label: 'Email', value: props.profile.email },
+  { label: 'Date of birth', value: formatDate(props.profile.dob) },
   { label: 'Work', value: props.about.work },
   { label: 'Education', value: props.about.education },
   { label: 'Hobbies', value: props.about.hobbies },

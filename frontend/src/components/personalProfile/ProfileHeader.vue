@@ -25,7 +25,7 @@ const props = defineProps({
   canMessage: Boolean,
 })
 
-const emit = defineEmits(['relationship-change', 'select-tab'])
+const emit = defineEmits(['relationship-change', 'select-tab', 'privacy-change'])
 
 const followingStatus = ref(props.isFollowing)
 const relationshipBusy = ref(false)
@@ -55,6 +55,10 @@ function formatDob(value) {
 
 async function changeRelationship(method) {
   if (relationshipBusy.value) return
+
+  // ask before unfollowing, so it does not happen by a wrong click
+  if (method === 'DELETE' && followingStatus.value === 1 &&
+    !window.confirm(`Unfollow ${props.firstName} ${props.lastName}?`)) return
 
   relationshipBusy.value = true
 
@@ -150,10 +154,17 @@ function initials() {
           {{ bio || 'No bio added yet.' }}
         </p>
 
-        <p class="privacy-badge" :class="{ 'privacy-badge--private': isPrivate }">
-          <IconGlyph :name="isPrivate ? 'lock' : 'globe'" :size="14" />
-          {{ isPrivate ? 'Private profile' : 'Public profile' }}
-        </p>
+        <div class="privacy-row">
+          <p class="privacy-badge" :class="{ 'privacy-badge--private': isPrivate }">
+            <IconGlyph :name="isPrivate ? 'lock' : 'globe'" :size="14" />
+            {{ isPrivate ? 'Private profile' : 'Public profile' }}
+          </p>
+
+          <!-- on my own profile i can switch public / private right here -->
+          <button v-if="addEdit" class="privacy-switch" type="button" @click="$emit('privacy-change', !isPrivate)">
+            {{ isPrivate ? 'Make public' : 'Make private' }}
+          </button>
+        </div>
       </div>
     </div>
 
@@ -177,6 +188,30 @@ function initials() {
 </template>
 
 <style scoped>
+.privacy-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.privacy-switch {
+  min-height: 2rem;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-soft);
+  cursor: pointer;
+  font-size: .8125rem;
+  font-weight: 600;
+}
+
+.privacy-switch:hover {
+  border-color: var(--color-violet);
+  color: var(--color-text);
+}
+
 .profile-header {
   overflow: hidden;
 }

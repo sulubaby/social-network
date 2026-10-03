@@ -45,6 +45,11 @@ function snapshot() {
 
 async function updateInfo() {
   if (saving.value || !isDirty.value) return
+  // changing public / private is a big change, so ask first
+  const privacyChanged = Boolean(form.IsPrivate) !== (profileData.userInfo.isPrivate === 1)
+  if (privacyChanged && !window.confirm(form.IsPrivate
+    ? 'Make your profile private? Only your followers will see your posts and info.'
+    : 'Make your profile public? Everyone will see your posts and info.')) return
   saving.value = true
   feedback.value = ''
   saveError.value = ''

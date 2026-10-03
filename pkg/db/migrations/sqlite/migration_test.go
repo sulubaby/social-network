@@ -801,3 +801,42 @@ func TestPostNotificationsMigrationUpDownUp(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestSessionsMigrationUpDownUp(t *testing.T) {
+	db, err := sql.Open("sqlite3", ":memory:?_foreign_keys=on")
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1)
+	defer db.Close()
+
+	filenames, err := filepath.Glob("*.up.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sort.Strings(filenames)
+	for _, filename := range filenames {
+		runMigrationFile(t, db, filename)
+	}
+	assertTable(t, db, "sessions", true)
+
+	_, err = db.Exec(`
+		INSERT INTO user (id, email, username, first_name, last_name, dob, password)
+		VALUES (1, 'session@orbit.test', 'session', 'Session', 'User', '2000-01-01', 'password');
+		INSERT INTO sessions (id, user_id, expires_at) VALUES ('abc', 1, '2999-01-01 00:00:00');
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// deleting the account ends its sessions
+	if _, err := db.Exec(`DELETE FROM user WHERE id = 1`); err != nil {
+		t.Fatal(err)
+	}
+	assertMigrationRowCount(t, db, `SELECT COUNT(*) FROM sessions`, 0)
+
+	runMigrationFile(t, db, "028_sessions.down.sql")
+	assertTable(t, db, "sessions", false)
+	runMigrationFile(t, db, "028_sessions.up.sql")
+	assertTable(t, db, "sessions", true)
+}

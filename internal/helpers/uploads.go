@@ -7,9 +7,11 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"io"
+	"log"
 	"mime/multipart"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -19,15 +21,17 @@ const POSTS_PATH = "uploads/posts"
 const COMMENTS_PATH = "uploads/comments"
 
 /*
-this function main functionality is to upload the files to the specefic folder, but it also validate the size and the 
+this function main functionality is to upload the files to the specefic folder, but it also validate the size and the
 dimensions of the file using DecodeConfig. Because this function is made to upload images or gif's
 
 Parameters:
+
 	file multipart.File, header *multipart.FileHeader, Type string
 															-> Type are strings that point to pathes mentioned in the begening of the file
-											
+
 Returns:
-	string	
+
+	string
 		-> path of the upload
 	error
 		-> nil if success
@@ -98,9 +102,12 @@ func SaveUploads(file multipart.File, header *multipart.FileHeader, Type string)
 function mostly used after deleteing or changing avatars and it is used to delete the prevoius avatar from the database
 
 Parameters:
-	avatarPath string	
+
+	avatarPath string
 		-> the path should be relative to the file /uploads/
+
 Return:
+
 	error
 		-> nil if success
 */
@@ -116,4 +123,24 @@ func DeleteAvatar(avatarPath string) error {
 	filePath := filepath.Join("uploads", filepath.FromSlash(avatarPath))
 
 	return os.Remove(filePath)
+}
+
+/*
+DeleteUpload removes a post or comment picture from the uploads folder.
+the path is the one saved in the database, like "posts/abc.png".
+it never deletes the default avatar and it only works inside uploads/
+*/
+func DeleteUpload(path string) {
+	if path == "" || filepath.Base(path) == "default.png" {
+		return
+	}
+
+	clean := filepath.Clean(filepath.FromSlash(path))
+	if strings.HasPrefix(clean, "..") || filepath.IsAbs(clean) {
+		return
+	}
+
+	if err := os.Remove(filepath.Join("uploads", clean)); err != nil && !os.IsNotExist(err) {
+		log.Println("could not delete upload:", err)
+	}
 }

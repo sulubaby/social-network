@@ -23,6 +23,8 @@ const route = useRoute()
 const groupId = route.params.groupId
 
 const group = ref(null)
+// the people in this group (the creator comes first)
+const members = ref([])
 const groupPosts = ref([])
 const loading = ref(true)
 const error = ref(null)
@@ -60,6 +62,7 @@ async function loadGroup() {
         const result = await getGroup(groupId)
 
         group.value = result.group
+        members.value = result.members || []
         if (group.value?.isMember) {
             activeSection.value = requestedSection || 'posts'
             await loadGroupPosts()
@@ -296,6 +299,15 @@ async function toggleJoinRequest() {
                         <span>People who make this space what it is</span>
                     </div>
                     <span class="group-membership__count">{{ group.memberCount }} total</span>
+                    <ul v-if="members.length" class="group-members">
+                        <li v-for="member in members" :key="member.id">
+                            <RouterLink class="group-member" :to="{ path: '/user', query: { id: member.id } }">
+                                <img :src="member.avatarPath ? `/uploads/${member.avatarPath}` : '/uploads/avatars/default.png'" alt="" />
+                                <span>{{ member.firstName }} {{ member.lastName }}</span>
+                                <small v-if="member.isCreator">creator</small>
+                            </RouterLink>
+                        </li>
+                    </ul>
                 </section>
 
                 <nav v-if="group.isMember" class="group-sections" aria-label="Group sections">
@@ -634,6 +646,7 @@ async function toggleJoinRequest() {
 
 .group-membership {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: var(--space-4);
@@ -651,6 +664,46 @@ async function toggleJoinRequest() {
 
 .group-membership > div :deep(.icon-glyph) {
     color: var(--color-violet-soft);
+}
+
+.group-members {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.group-member {
+    display: inline-flex;
+    align-items: center;
+    gap: .45rem;
+    padding: .3rem .7rem .3rem .3rem;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    color: var(--color-text);
+    font-size: .8125rem;
+    text-decoration: none;
+}
+
+.group-member:hover {
+    border-color: var(--color-violet);
+}
+
+.group-member img {
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.group-member small {
+    color: var(--color-mint);
+    font-family: var(--font-meta);
+    font-size: .65rem;
+    text-transform: uppercase;
 }
 
 .group-membership__count {

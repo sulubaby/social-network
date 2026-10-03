@@ -128,6 +128,7 @@ async function toggleFollow(user) {
   busyUsers.value = new Set(busyUsers.value).add(user.id)
   try {
     const shouldRemove = user.followStatus >= 0
+    if (user.followStatus === 1 && !window.confirm(`Unfollow ${user.firstName} ${user.lastName}?`)) return
     const result = await requestFollow(user.id, shouldRemove ? 'DELETE' : 'POST')
     user.followStatus = result?.followStatus ?? (shouldRemove ? -1 : 1)
   } catch (followError) {

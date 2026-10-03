@@ -155,6 +155,9 @@ function applyRemoval(id) {
 
 async function handleAction(user) {
   if (busyIds.value.includes(user.id)) return
+  const name = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'this user'
+  const question = props.type === 'followers' ? `Remove ${name} from your followers?` : `Unfollow ${name}?`
+  if (!window.confirm(question)) return
   busyIds.value.push(user.id)
   try {
     const result = props.type === 'followers'

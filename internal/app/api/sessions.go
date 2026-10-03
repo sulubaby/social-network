@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/http"
 	"social/database/users"
-	"social/internal/app/tokens"
 	"social/internal/helpers"
 	"social/internal/models"
 	"time"
@@ -32,9 +31,10 @@ Method:
  - status must be true
  - message: success message
 
--> a authentication token will be created and stored in a HTTP-only cookie
+-> a session will be saved in the sessions table and its id stored in a HTTP-only cookie
  - cookie name: token
- - cookie expires after 30 days
+ - with "keep me signed in" the session lasts 30 days, without it the cookie
+   is gone when the browser closes (and the session ends after one day)
 */
 func (app *App) LoggingUser(w http.ResponseWriter, r *http.Request) {
 	var logger models.UserLogger
@@ -82,29 +82,34 @@ func (app *App) LoggingUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := tokens.GenerateToken(userID)
+	// "keep me signed in" keeps the session for 30 days. without it the
+	// cookie is gone when the browser closes and the session ends after a day
+	remember := logger.Remember == nil || *logger.Remember
+	ttl := 24 * time.Hour
+	if remember {
+		ttl = 30 * 24 * time.Hour
+	}
+
+	sessionID, err := users.CreateSession(app.DB, userID, ttl)
 	if err != nil {
 		log.Println(err)
 		helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
 			"status":  false,
-			"message": "could not create authentication token",
+			"message": "could not create session",
 		})
 		return
 	}
 
 	cookie := http.Cookie{
 		Name:     "token",
-		Value:    token,
+		Value:    sessionID,
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 	}
-	// "keep me signed in" keeps the cookie for 30 days, without it the cookie
-	// is gone when the browser closes (the token itself still expires on its own)
-	if logger.Remember == nil || *logger.Remember {
-		cookie.Expires = time.Now().Add(24 * 30 * time.Hour)
+	if remember {
+		cookie.Expires = time.Now().Add(ttl)
 	}
-
 	http.SetCookie(w, &cookie)
 
 	helpers.WriteJson(w, http.StatusOK, map[string]any{
@@ -149,8 +154,13 @@ Method:
 */
 func (app *App) DeleteSession(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie("token"); err == nil {
-		if payload, verifyErr := tokens.VerifyToken(cookie.Value); verifyErr == nil && app.Realtime != nil {
-			app.Realtime.DisconnectUser(payload.UserID)
+		userID, findErr := users.SessionUser(app.DB, cookie.Value)
+		if findErr == nil && app.Realtime != nil {
+			app.Realtime.DisconnectUser(userID)
+		}
+		// delete the session so this cookie can never be used again
+		if delErr := users.DeleteSession(app.DB, cookie.Value); delErr != nil {
+			log.Println(delErr)
 		}
 	}
 

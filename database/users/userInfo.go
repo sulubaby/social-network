@@ -183,10 +183,10 @@ Returns:
 	-> nil if successful
 	-> Error if the user or profile cannot be updated
 */
-func UpdateUserInfo(db *sql.DB, userID int, userData *models.UserRegistration) ([]int, error) {
+func UpdateUserInfo(db *sql.DB, userID int, userData *models.UserRegistration) error {
 	tx, err := db.Begin()
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer tx.Rollback()
 
@@ -196,13 +196,13 @@ func UpdateUserInfo(db *sql.DB, userID int, userData *models.UserRegistration) (
 		WHERE id = ?
 	`, userData.FirstName, userData.LastName, userData.Email, userData.UserName, userID)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// the password only changes when a new one was typed (it is already hashed here)
 	if userData.Password != "" {
 		if _, err = tx.Exec(`UPDATE user SET password = ? WHERE id = ?`, userData.Password, userID); err != nil {
-			return nil, err
+			return err
 		}
 	}
 
@@ -212,32 +212,55 @@ func UpdateUserInfo(db *sql.DB, userID int, userData *models.UserRegistration) (
 		WHERE user_id = ?
 	`, userData.About, userData.IsPrivate, userID)
 	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+/*
+AcceptPendingRequests is used when a profile turns public: a public profile has
+no follow requests, so everyone who was waiting becomes a follower.
+
+Returns:
+
+	[]int -> the people who were accepted (so they can be told)
+*/
+func AcceptPendingRequests(db *sql.DB, userID int) ([]int, error) {
+	tx, err := db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	rows, err := tx.Query(`SELECT follower_id FROM user_followers WHERE target_id = ? AND status = 0`, userID)
+	if err != nil {
+		return nil, err
+	}
+	var accepted []int
+	for rows.Next() {
+		var followerID int
+		if err := rows.Scan(&followerID); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		accepted = append(accepted, followerID)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 
-	// a public profile has no follow requests, everyone who was waiting is accepted
-	var accepted []int
-	if userData.IsPrivate == 0 {
-		rows, err := tx.Query(`SELECT follower_id FROM user_followers WHERE target_id = ? AND status = 0`, userID)
-		if err != nil {
-			return nil, err
-		}
-		for rows.Next() {
-			var followerID int
-			if err := rows.Scan(&followerID); err != nil {
-				rows.Close()
-				return nil, err
-			}
-			accepted = append(accepted, followerID)
-		}
-		rows.Close()
-		if err := rows.Err(); err != nil {
-			return nil, err
-		}
+	if _, err = tx.Exec(`UPDATE user_followers SET status = 1 WHERE target_id = ? AND status = 0`, userID); err != nil {
+		return nil, err
+	}
 
-		if _, err = tx.Exec(`UPDATE user_followers SET status = 1 WHERE target_id = ? AND status = 0`, userID); err != nil {
-			return nil, err
-		}
+	// the request alerts stay in the list but show as answered
+	if _, err = tx.Exec(`
+		UPDATE notifications SET is_read = 1
+		WHERE user_id = ? AND category = 'requests' AND type = 'follow_request'
+	`, userID); err != nil {
+		return nil, err
 	}
 
 	return accepted, tx.Commit()

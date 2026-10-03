@@ -76,8 +76,24 @@ func (app App) canViewPostUpload(userID int, imagePath string) (bool, error) {
 func (app App) canViewCommentUpload(userID int, imagePath string) (bool, error) {
 	var postID int64
 	err := app.DB.QueryRow(`SELECT post_id FROM comments WHERE image_path = ?`, imagePath).Scan(&postID)
-	if err != nil {
+	if err == nil {
+		return comments.CanViewPost(app.DB, userID, postID)
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
 		return false, err
 	}
-	return comments.CanViewPost(app.DB, userID, postID)
+
+	// not a normal comment, maybe a comment in a group. then i must be a member
+	var allowed bool
+	err = app.DB.QueryRow(`
+		SELECT EXISTS (
+			SELECT 1
+			FROM group_post_comments gc
+			JOIN group_posts gp ON gp.id = gc.post_id
+			JOIN group_members gm ON gm.group_id = gp.group_id
+			WHERE gc.image_path = ?
+			  AND gm.user_id = ?
+		)
+	`, imagePath, userID).Scan(&allowed)
+	return allowed, err
 }
