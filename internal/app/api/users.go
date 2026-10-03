@@ -9,6 +9,7 @@ import (
 	"social/internal/helpers"
 	"social/internal/models"
 	"social/internal/validation"
+	"time"
 )
 
 /*
@@ -125,8 +126,12 @@ func (app *App) UpdateUserInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var userData models.UserRegistration
-	if err := json.NewDecoder(r.Body).Decode(&userData); err != nil {
+	// VerifyToken is only needed when the email changes, same as when registering
+	var input struct {
+		models.UserRegistration
+		VerifyToken string
+	}
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		log.Println(err)
 		helpers.WriteJson(w, http.StatusBadRequest, map[string]any{
 			"status":  false,
@@ -135,6 +140,8 @@ func (app *App) UpdateUserInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userData := input.UserRegistration
+
 	if err := validation.ValidateUpdateInfo(&userData); err != nil {
 		log.Println(err)
 		helpers.WriteJson(w, http.StatusBadRequest, map[string]any{
@@ -142,6 +149,35 @@ func (app *App) UpdateUserInfo(w http.ResponseWriter, r *http.Request) {
 			"message": "invalid data:" + err.Error(),
 		})
 		return
+	}
+
+	// a new email has to be checked with a code first, like on the register page
+	var currentEmail string
+	if err := app.DB.QueryRow(`SELECT email FROM user WHERE id = ?`, userID).Scan(&currentEmail); err != nil {
+		log.Println(err)
+		helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
+			"status":  false,
+			"message": "could not load your account",
+		})
+		return
+	}
+	if userData.Email != currentEmail {
+		verified, err := users.HasVerifiedEmail(app.DB, userData.Email, input.VerifyToken, time.Now())
+		if err != nil {
+			log.Println(err)
+			helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
+				"status":  false,
+				"message": "could not check the new email",
+			})
+			return
+		}
+		if !verified {
+			helpers.WriteJson(w, http.StatusForbidden, map[string]any{
+				"status":  false,
+				"message": "please verify your new email first",
+			})
+			return
+		}
 	}
 
 	if len(userData.Password) != 0 {
@@ -166,6 +202,13 @@ func (app *App) UpdateUserInfo(w http.ResponseWriter, r *http.Request) {
 			"message": message,
 		})
 		return
+	}
+
+	// the code was used, dont keep it around
+	if userData.Email != currentEmail {
+		if err := users.DeleteEmailCode(app.DB, userData.Email); err != nil {
+			log.Println(err)
+		}
 	}
 
 	// a public profile has no requests, accept everyone who was waiting

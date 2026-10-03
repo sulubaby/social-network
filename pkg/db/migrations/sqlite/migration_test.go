@@ -840,3 +840,45 @@ func TestSessionsMigrationUpDownUp(t *testing.T) {
 	runMigrationFile(t, db, "028_sessions.up.sql")
 	assertTable(t, db, "sessions", true)
 }
+
+func TestSelectedViewersFollowMigration(t *testing.T) {
+	db, err := sql.Open("sqlite3", ":memory:?_foreign_keys=on")
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1)
+	defer db.Close()
+
+	filenames, err := filepath.Glob("*.up.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sort.Strings(filenames)
+	for _, filename := range filenames {
+		runMigrationFile(t, db, filename)
+	}
+
+	_, err = db.Exec(`
+		INSERT INTO user (id, email, username, first_name, last_name, dob, password)
+		VALUES (1, 'author@orbit.test', 'author', 'Post', 'Author', '2000-01-01', 'password'),
+		       (2, 'friend@orbit.test', 'friend', 'Good', 'Friend', '2000-01-01', 'password'),
+		       (3, 'other@orbit.test', 'other', 'Other', 'Friend', '2000-01-01', 'password');
+		INSERT INTO user_followers (follower_id, target_id, status) VALUES (2, 1, 1), (3, 1, 1);
+		INSERT INTO posts (id, content, user_id, privacy) VALUES (5, 'only for you two', 1, 'selected');
+		INSERT INTO post_viewers (post_id, viewer_id) VALUES (5, 2), (5, 3);
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// user 2 unfollows, so they cant see the selected post anymore. user 3 still can
+	if _, err := db.Exec(`DELETE FROM user_followers WHERE follower_id = 2 AND target_id = 1`); err != nil {
+		t.Fatal(err)
+	}
+	assertMigrationRowCount(t, db, `SELECT COUNT(*) FROM post_viewers WHERE viewer_id = 2`, 0)
+	assertMigrationRowCount(t, db, `SELECT COUNT(*) FROM post_viewers WHERE viewer_id = 3`, 1)
+
+	runMigrationFile(t, db, "029_selected_viewers_follow.down.sql")
+	runMigrationFile(t, db, "029_selected_viewers_follow.up.sql")
+	assertMigrationRowCount(t, db, `SELECT COUNT(*) FROM post_viewers WHERE viewer_id = 3`, 1)
+}

@@ -3,6 +3,7 @@ import { computed, reactive, ref } from 'vue'
 import FormField from '@/components/ProfileEdit/FormField.vue'
 import AvatarUploader from '@/components/ProfileEdit/AvatarUploader.vue'
 import { updateUserInfo } from '@/api/users/editProfile'
+import { sendEmailCode, verifyEmailCode } from '@/api/auth/auth'
 import { addNotification } from '@/data/notifications'
 import { profileData } from '@/data/usersData'
 
@@ -31,6 +32,46 @@ const feedback = ref('')
 const saveError = ref('')
 const isDirty = computed(() => snapshot() !== savedSnapshot.value)
 
+// a new email needs a code from that inbox before we can save it
+const savedEmail = ref(props.email || '')
+const emailChanged = computed(() => form.Email.trim().toLowerCase() !== savedEmail.value.toLowerCase())
+const codeSentTo = ref('')
+const emailCode = ref('')
+const verifyToken = ref('')
+const verifiedEmail = ref('')
+const emailBusy = ref(false)
+const emailError = ref('')
+const needsCode = computed(() => emailChanged.value && verifiedEmail.value !== form.Email.trim().toLowerCase())
+
+async function sendCode() {
+  emailBusy.value = true
+  emailError.value = ''
+  try {
+    await sendEmailCode(form.Email)
+    codeSentTo.value = form.Email.trim().toLowerCase()
+    addNotification('We sent a code to ' + form.Email, 'success')
+  } catch (err) {
+    emailError.value = err.message
+  } finally {
+    emailBusy.value = false
+  }
+}
+
+async function checkCode() {
+  emailBusy.value = true
+  emailError.value = ''
+  try {
+    const result = await verifyEmailCode(codeSentTo.value, emailCode.value.trim())
+    verifyToken.value = result.token
+    verifiedEmail.value = codeSentTo.value
+    emailCode.value = ''
+  } catch (err) {
+    emailError.value = err.message
+  } finally {
+    emailBusy.value = false
+  }
+}
+
 function snapshot() {
   return JSON.stringify({
     FirstName: form.FirstName,
@@ -45,6 +86,10 @@ function snapshot() {
 
 async function updateInfo() {
   if (saving.value || !isDirty.value) return
+  if (needsCode.value) {
+    saveError.value = 'Please verify your new email first.'
+    return
+  }
   // changing public / private is a big change, so ask first
   const privacyChanged = Boolean(form.IsPrivate) !== (profileData.userInfo.isPrivate === 1)
   if (privacyChanged && !window.confirm(form.IsPrivate
@@ -54,7 +99,10 @@ async function updateInfo() {
   feedback.value = ''
   saveError.value = ''
   try {
-    const result = await updateUserInfo({ ...form, IsPrivate: form.IsPrivate ? 1 : 0 })
+    const result = await updateUserInfo({ ...form, IsPrivate: form.IsPrivate ? 1 : 0, VerifyToken: verifyToken.value })
+    savedEmail.value = form.Email.trim().toLowerCase()
+    verifyToken.value = ''
+    codeSentTo.value = ''
     profileData.userInfo.firstName = form.FirstName
     profileData.userInfo.lastName = form.LastName
     profileData.userInfo.userName = form.Username
@@ -95,6 +143,18 @@ async function updateInfo() {
           <FormField id="username" v-model="form.Username" label="Username" placeholder="Username" />
           <FormField id="email" v-model="form.Email" label="Email" type="email" placeholder="Email address" />
         </div>
+        <div v-if="needsCode" class="email-check">
+          <p>To use a new email, enter the code we send to it.</p>
+          <div class="email-check__row">
+            <button type="button" :disabled="emailBusy" @click="sendCode">{{ codeSentTo === form.Email.trim().toLowerCase() ? 'Send again' : 'Send code' }}</button>
+            <template v-if="codeSentTo === form.Email.trim().toLowerCase()">
+              <input v-model="emailCode" inputmode="numeric" maxlength="6" placeholder="6 digit code" aria-label="Email code" />
+              <button type="button" :disabled="emailBusy || emailCode.trim().length !== 6" @click="checkCode">Verify</button>
+            </template>
+          </div>
+          <p v-if="emailError" class="email-check__error" role="alert">{{ emailError }}</p>
+        </div>
+        <p v-else-if="emailChanged" class="email-check__ok">New email verified.</p>
         <FormField id="bio" v-model="form.About" label="About me" type="textarea" placeholder="Tell people about yourself" />
         <FormField id="password" v-model="form.Password" label="New password (optional)" type="password" placeholder="Leave blank to keep your current password" />
       </div>
@@ -144,6 +204,13 @@ form, .edit-group { display: grid; gap: var(--space-4); }
 .form-actions a, .form-actions button { display: inline-flex; min-height: var(--touch-target); align-items: center; justify-content: center; padding: 0 var(--space-4); border-radius: var(--radius-small); font-weight: 700; text-decoration: none; }
 .form-actions a { border: 1px solid var(--color-border); color: var(--color-text-soft); }
 .form-actions button { border: 0; background: var(--gradient-action); color: white; cursor: pointer; }
+.email-check { display: grid; gap: var(--space-2); padding: var(--space-3) var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-small); }
+.email-check p { margin: 0; color: var(--color-text-soft); font-size: .875rem; }
+.email-check__row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.email-check__row input { min-height: var(--touch-target); width: 9rem; padding: 0 var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-small); background: transparent; color: inherit; }
+.email-check__row button { min-height: var(--touch-target); padding: 0 var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-small); background: transparent; color: var(--color-text-soft); font-weight: 700; cursor: pointer; }
+.email-check__error { color: var(--color-coral-soft) !important; }
+.email-check__ok { margin: 0; color: var(--color-mint); font-size: .875rem; }
 @media (max-width: 600px) {
   .edit-section { padding: var(--space-4); }
   .field-grid { grid-template-columns: 1fr; }

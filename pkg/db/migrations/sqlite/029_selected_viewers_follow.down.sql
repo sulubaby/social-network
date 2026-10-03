@@ -1,0 +1,1 @@
+DROP TRIGGER IF EXISTS remove_selected_viewer_on_unfollow;
