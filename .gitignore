@@ -8,7 +8,6 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
-./db/
 ./frontend/node_modules
 .DS_Store
 dist
@@ -18,8 +17,7 @@ coverage
 
 # Editor directories and files
 uploads/
-./db/
-db/
+/db/
 *.db
 *.db-wal
 *.db-shm
