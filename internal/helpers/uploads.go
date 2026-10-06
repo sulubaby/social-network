@@ -2,13 +2,11 @@ package helpers
 
 import (
 	"errors"
-	"image"
-	_ "image/gif"
-	_ "image/jpeg"
-	_ "image/png"
+	"fmt"
 	"io"
 	"log"
 	"mime/multipart"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,129 +16,140 @@ import (
 
 const AVATAR_PATH = "uploads/avatars"
 const POSTS_PATH = "uploads/posts"
+const AVATARS_GROUPS_PATH = "uploads/groups/avatars"
+const CHATS_PATH = "uploads/chats"
 const COMMENTS_PATH = "uploads/comments"
+const MaxChatMediaSize = 8 << 20
 
-/*
-this function main functionality is to upload the files to the specefic folder, but it also validate the size and the
-dimensions of the file using DecodeConfig. Because this function is made to upload images or gif's
+var ErrChatMediaTooLarge = errors.New("file is too large")
+var ErrChatMediaUnsupported = errors.New("only jpg, png, gif and webp images are allowed")
 
-Parameters:
+var chatMediaTypes = map[string]string{
+	"image/jpeg": ".jpg",
+	"image/png":  ".png",
+	"image/gif":  ".gif",
+	"image/webp": ".webp",
+}
 
-	file multipart.File, header *multipart.FileHeader, Type string
-															-> Type are strings that point to pathes mentioned in the begening of the file
-
-Returns:
-
-	string
-		-> path of the upload
-	error
-		-> nil if success
-*/
 func SaveUploads(file multipart.File, header *multipart.FileHeader, Type string) (string, error) {
-	if header.Size > 5*1024*1024 {
-		return "", errors.New("image must be no larger than 5 MB")
-	}
-
-	// we read the file in the handler so we are reading it again. just so we make sure we read it from the begging we use file.Seek with offset 0
-	if _, err := file.Seek(0, io.SeekStart); err != nil {
-		return "", err
-	}
-
-	config, format, err := image.DecodeConfig(file)
-	if err != nil || config.Width <= 0 || config.Height <= 0 || int64(config.Width)*int64(config.Height) > 40_000_000 {
-		return "", errors.New("invalid or oversized image")
-	}
-	extensions := map[string]string{"jpeg": ".jpg", "png": ".png", "gif": ".gif"}
-	extension, ok := extensions[format]
-	if !ok {
-		return "", errors.New("only JPEG, PNG and GIF images are allowed")
-	}
-	if _, err := file.Seek(0, io.SeekStart); err != nil {
-		return "", err
-	}
 	var path string
 
-	if Type == "avatar" {
-		path = AVATAR_PATH
-	} else if Type == "post" {
+	if Type == "post" {
 		path = POSTS_PATH
-	} else if Type == "comment" {
-		path = COMMENTS_PATH
+	} else if Type == "avatar" {
+		path = AVATAR_PATH
+	} else if Type == "group/avatar" {
+		path = AVATARS_GROUPS_PATH
 	} else {
-		return "", os.ErrInvalid
+		return "", fmt.Errorf("invalid upload type")
 	}
 
 	if err := os.MkdirAll(path, 0755); err != nil {
 		return "", err
 	}
 
+	extension := filepath.Ext(header.Filename)
 	filename := uuid.New().String() + extension
 	filePath := filepath.Join(path, filename)
+
+	log.Println("Saving upload to:", filePath)
 
 	dst, err := os.Create(filePath)
 	if err != nil {
 		return "", err
 	}
+
 	defer dst.Close()
 
-	if _, err := io.Copy(dst, file); err != nil {
-		os.Remove(filePath)
+	_, err = io.Copy(dst, file)
+
+	if err != nil {
 		return "", err
 	}
 
 	if Type == "avatar" {
 		return "avatars/" + filename, nil
 	}
-	if Type == "comment" {
-		return "comments/" + filename, nil
-	}
 
 	return "posts/" + filename, nil
 }
 
-/*
-function mostly used after deleteing or changing avatars and it is used to delete the prevoius avatar from the database
-
-Parameters:
-
-	avatarPath string
-		-> the path should be relative to the file /uploads/
-
-Return:
-
-	error
-		-> nil if success
-*/
-func DeleteAvatar(avatarPath string) error {
-	if avatarPath == "" {
-		return nil
-	}
-
-	if filepath.Base(avatarPath) == "default.png" {
-		return nil
-	}
-
-	filePath := filepath.Join("uploads", filepath.FromSlash(avatarPath))
-
-	return os.Remove(filePath)
+func SaveChatMedia(file multipart.File, header *multipart.FileHeader) (string, string, error) {
+	return saveMedia(file, header, CHATS_PATH, "chats/")
 }
 
-/*
-DeleteUpload removes a post or comment picture from the uploads folder.
-the path is the one saved in the database, like "posts/abc.png".
-it never deletes the default avatar and it only works inside uploads/
-*/
-func DeleteUpload(path string) {
-	if path == "" || filepath.Base(path) == "default.png" {
+func SaveCommentMedia(file multipart.File, header *multipart.FileHeader) (string, error) {
+	path, _, err := saveMedia(file, header, COMMENTS_PATH, "comments/")
+	return path, err
+}
+
+func RemoveCommentMedia(path string) {
+	if !strings.HasPrefix(path, "comments/") {
 		return
 	}
 
-	clean := filepath.Clean(filepath.FromSlash(path))
-	if strings.HasPrefix(clean, "..") || filepath.IsAbs(clean) {
-		return
+	filePath := filepath.Join(COMMENTS_PATH, filepath.Base(path))
+
+	if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
+		log.Println("could not remove comment media:", err)
+	}
+}
+
+func saveMedia(file multipart.File, header *multipart.FileHeader, dir, prefix string) (string, string, error) {
+	if header.Size > MaxChatMediaSize {
+		return "", "", ErrChatMediaTooLarge
 	}
 
-	if err := os.Remove(filepath.Join("uploads", clean)); err != nil && !os.IsNotExist(err) {
-		log.Println("could not delete upload:", err)
+	buffer := make([]byte, 512)
+
+	n, err := file.Read(buffer)
+	if err != nil && err != io.EOF {
+		return "", "", err
 	}
+
+	contentType := http.DetectContentType(buffer[:n])
+
+	extension, ok := chatMediaTypes[contentType]
+	if !ok {
+		return "", "", ErrChatMediaUnsupported
+	}
+
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return "", "", err
+	}
+
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return "", "", err
+	}
+
+	filename := uuid.New().String() + extension
+	filePath := filepath.Join(dir, filename)
+
+	dst, err := os.Create(filePath)
+	if err != nil {
+		return "", "", err
+	}
+
+	written, err := io.Copy(dst, io.LimitReader(file, MaxChatMediaSize+1))
+	closeErr := dst.Close()
+
+	if err == nil {
+		err = closeErr
+	}
+
+	if err == nil && written > MaxChatMediaSize {
+		err = ErrChatMediaTooLarge
+	}
+
+	if err != nil {
+		os.Remove(filePath)
+		return "", "", err
+	}
+
+	kind := "image"
+	if contentType == "image/gif" {
+		kind = "gif"
+	}
+
+	return prefix + filename, kind, nil
 }

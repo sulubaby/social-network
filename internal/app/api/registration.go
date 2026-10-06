@@ -2,59 +2,33 @@ package api
 
 import (
 	"database/sql"
-	"errors"
 	"log"
 	"net/http"
-	database "social/database/users"
+	"social/database/users"
+	"social/internal/app/mailer"
+	"social/internal/app/otp"
+	"social/internal/app/tokens"
 	"social/internal/helpers"
 	"social/internal/models"
-	"social/internal/realtime"
 	"social/internal/validation"
+	"sync"
 	"time"
+
+	"golang.org/x/net/websocket"
 )
 
 type App struct {
-	DB            *sql.DB
-	Realtime      *realtime.Hub
-	EmailAddress  string
-	EmailPassword string
+	DB   *sql.DB
+	H    *Hub
+	OTP  *otp.Store
+	Mail *mailer.Mailer
 }
 
-/*
-Handler used to register a new user.
+type Hub struct {
+	Conn map[int]*websocket.Conn
+	Mu   sync.RWMutex
+}
 
-Method:
-    POST
-
--> data should be provided using
- - multipart/form-data
-
--> required form data
- - FirstName string
- - LastName string
- - UserName string
- - Email string
- - Password string
- - About string
- - dob string (format: YYYY-MM-DD)
- - VerifyToken string
- - Avatar file (optional)
-
--> the handler will
- - validate the registration data
- - check if the email was verified using the VerifyToken
- - save the avatar if provided
- - hash the password
- - register the user in the database
-
--> in case of error there will be a respond written back and can me checked by
- - status boolean (false)
- - message string
-
--> in case of success a respond will be written back
- - status boolean (true)
- - message string
-*/
 func (app *App) RegisterUser(w http.ResponseWriter, r *http.Request) {
 	err := r.ParseMultipartForm(10 << 20)
 
@@ -102,22 +76,11 @@ func (app *App) RegisterUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	verifyToken := r.FormValue("VerifyToken")
-
-	verified, err := database.HasVerifiedEmail(app.DB, userData.Email, verifyToken, time.Now())
-	if err != nil {
-		log.Println(err)
-
-		helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
-			"status":  false,
-			"message": "could not check email verification",
-		})
-		return
-	}
-
-	if !verified {
+	
+	if !app.OTP.CheckToken(verifyToken, userData.Email) {
 		helpers.WriteJson(w, http.StatusForbidden, map[string]any{
 			"status":  false,
-			"message": "Please verify your email before registering.",
+			"message": "Email verification is required",
 		})
 		return
 	}
@@ -161,16 +124,7 @@ func (app *App) RegisterUser(w http.ResponseWriter, r *http.Request) {
 
 	userData.Password = hashedPassword
 
-	if err := database.RegisterUser(app.DB, &userData, verifyToken); err != nil {
-		log.Println(err)
-
-		if errors.Is(err, database.ErrEmailNotVerified) {
-			helpers.WriteJson(w, http.StatusForbidden, map[string]any{
-				"status":  false,
-				"message": "Please verify your email before registering.",
-			})
-			return
-		}
+	if err := users.RegisterUser(app.DB, &userData); err != nil {
 
 		status, message := helpers.NormalizeSQLError(err)
 
@@ -180,6 +134,38 @@ func (app *App) RegisterUser(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
+	app.OTP.DeleteToken(verifyToken)
+
+	userID := users.GetUserID(app.DB, userData.Email)
+	if userID == -1 {
+		helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
+			"status":  false,
+			"message": "could not get user data",
+		})
+		return
+	}
+
+	token, err := tokens.GenerateToken(userID)
+	if err != nil {
+		log.Println(err)
+		helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
+			"status":  false,
+			"message": "could not create authentication token",
+		})
+		return
+	}
+
+	cookie := http.Cookie{
+		Name:     "token",
+		Value:    token,
+		Path:     "/",
+		Expires:  time.Now().Add(24 * 30 * time.Hour),
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	}
+
+	http.SetCookie(w, &cookie)
 
 	helpers.WriteJson(w, http.StatusCreated, map[string]any{
 		"status":  true,

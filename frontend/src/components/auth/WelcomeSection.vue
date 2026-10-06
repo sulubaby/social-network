@@ -1,189 +1,323 @@
-<script setup>
-import OrbitLogo from '@/components/layout/OrbitLogo.vue'
-import IconGlyph from '@/components/layout/IconGlyph.vue'
-
-const features = [
-  { icon: 'profile', label: 'Followers you actually control', tone: 'violet' },
-  { icon: 'groups', label: 'Groups with events and RSVP', tone: 'coral' },
-  { icon: 'chat', label: 'Real-time chat over websockets', tone: 'mint' },
-]
-</script>
-
 <template>
-  <section class="welcome-section" aria-label="About Orbit">
-    <div class="welcome-inner">
-      <a class="welcome-brand" href="/login" aria-label="Orbit home">
-        <OrbitLogo />
-        <span>orbit</span>
-      </a>
+    <section class="welcome-section">
 
-      <div class="welcome-content">
-        <h1>Find your<br />people. Keep<br /><span>your orbit.</span></h1>
-        <p class="welcome-text">
-          Post to everyone, your followers, or a hand-picked few. Privacy is a choice you see — not a setting you forget.
-        </p>
+        <div class="welcome-content">
 
-        <ul class="feature-list" aria-label="Orbit features">
-          <li v-for="feature in features" :key="feature.label">
-            <span class="feature-icon" :class="`feature-icon--${feature.tone}`"><IconGlyph :name="feature.icon" :size="17" /></span>
-            <span>{{ feature.label }}</span>
-          </li>
-        </ul>
-      </div>
-    </div>
+            <div class="logo">N</div>
 
-    <span class="welcome-orbit welcome-orbit--primary" aria-hidden="true"></span>
-    <span class="welcome-orbit welcome-orbit--secondary" aria-hidden="true"></span>
-    <span class="welcome-orbit welcome-orbit--tertiary" aria-hidden="true"></span>
-    <span class="welcome-grid" aria-hidden="true"></span>
-  </section>
+            <p class="eyebrow">
+                WELCOME BACK
+            </p>
+
+            <h1>
+                Your people.<br>
+                Your <span>place.</span>
+            </h1>
+
+            <p class="welcome-text">
+                Connect with people, share your thoughts,
+                and keep up with the things that matter to you.
+            </p>
+
+            <div class="welcome-line"></div>
+
+            <p class="small-text">
+                A simple place to stay connected.
+            </p>
+
+        </div>
+
+        <div class="decoration decoration-one"></div>
+        <div class="decoration decoration-two"></div>
+        <div class="decoration decoration-three"></div>
+
+        <div class="circle circle-one"></div>
+        <div class="circle circle-two"></div>
+
+        <div class="grid-pattern"></div>
+
+    </section>
 </template>
 
 <style scoped>
 .welcome-section {
-  position: relative;
-  min-height: 18rem;
-  overflow: hidden;
-  background: var(--color-background);
-  isolation: isolate;
-}
+    position: relative;
 
-.welcome-inner {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  align-content: start;
-  gap: clamp(2.5rem, 9vh, 6rem);
-  height: 100%;
-  padding: clamp(1.25rem, 4vw, 3rem) clamp(1.5rem, 5vw, 4rem);
-}
+    min-height: 100vh;
+    min-height: 100dvh;
 
-.welcome-brand {
-  display: inline-flex;
-  width: fit-content;
-  align-items: center;
-  gap: var(--space-2);
-  color: var(--color-text);
-  font-family: var(--font-display);
-  font-size: 1.25rem;
-  font-weight: 700;
-  text-decoration: none;
-}
+    display: flex;
+    align-items: center;
 
-.welcome-brand :deep(.orbit-logo) {
-  transform: scale(.68);
-  transform-origin: left center;
-  margin-right: -.55rem;
+    padding: 80px;
+
+    background: var(--bg-color);
+
+    border-right: 2px solid var(--main-color);
+
+    overflow: hidden;
 }
 
 .welcome-content {
-  max-width: 31rem;
+    position: relative;
+    z-index: 5;
+
+    max-width: 650px;
+}
+
+.logo {
+    width: 55px;
+    height: 55px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    margin-bottom: 55px;
+
+    background: var(--input-focus);
+
+    border: 2px solid var(--main-color);
+    border-radius: 8px;
+
+    box-shadow: 5px 5px var(--main-color);
+
+    color: white;
+
+    font-family: "JetBrains Mono", monospace;
+    font-size: 25px;
+    font-weight: 600;
+}
+
+.eyebrow {
+    margin: 0 0 15px;
+
+    color: var(--input-focus);
+
+    font-family: "JetBrains Mono", monospace;
+
+    font-size: 13px;
+    font-weight: 600;
+
+    letter-spacing: 3px;
 }
 
 h1 {
-  margin: 0;
-  color: var(--color-text);
-  font-family: var(--font-display);
-  font-size: clamp(2.75rem, 6vw, 4.25rem);
-  font-weight: 700;
-  letter-spacing: -.055em;
-  line-height: .98;
+    margin: 0;
+
+    color: var(--main-color);
+
+    font-family: "Liter", serif;
+
+    font-size: clamp(60px, 6vw, 100px);
+
+    line-height: 0.95;
+
+    letter-spacing: -4px;
 }
 
 h1 span {
-  color: var(--color-violet);
+    color: var(--input-focus);
 }
 
 .welcome-text {
-  max-width: 34rem;
-  margin: 1.5rem 0 1.25rem;
-  color: var(--color-text-muted);
-  font-size: 1rem;
-  line-height: 1.45;
+    max-width: 480px;
+
+    margin: 35px 0 30px;
+
+    color: var(--font-color-sub);
+
+    font-size: 18px;
+
+    line-height: 1.7;
 }
 
-.feature-list {
-  display: grid;
-  gap: .65rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  color: var(--color-text-soft);
-  font-size: .875rem;
+.welcome-line {
+    width: 70px;
+    height: 4px;
+
+    margin-bottom: 20px;
+
+    background: var(--main-color);
 }
 
-.feature-list li {
-  display: flex;
-  align-items: center;
-  gap: .7rem;
+.small-text {
+    margin: 0;
+
+    color: var(--main-color);
+
+    font-family: "JetBrains Mono", monospace;
+
+    font-size: 12px;
 }
 
-.feature-icon {
-  display: inline-grid;
-  width: 1.25rem;
-  height: 1.25rem;
-  flex: 0 0 1.25rem;
-  place-items: center;
-  font-size: 1.1rem;
-  line-height: 1;
+.decoration {
+    position: absolute;
+
+    border: 2px solid var(--main-color);
+
+    background: var(--input-focus);
+
+    box-shadow: 7px 7px var(--main-color);
 }
 
-.feature-icon--violet { color: var(--color-violet); }
-.feature-icon--coral { color: var(--color-coral); }
-.feature-icon--mint { color: var(--color-mint); }
+.decoration-one {
+    width: 180px;
+    height: 180px;
 
-.welcome-orbit,
-.welcome-grid {
-  position: absolute;
-  pointer-events: none;
+    right: -70px;
+    top: 15%;
+
+    transform: rotate(25deg);
 }
 
-.welcome-orbit {
-  border-radius: 50%;
+.decoration-two {
+    width: 100px;
+    height: 100px;
+
+    right: 18%;
+    bottom: -35px;
+
+    background: var(--bg-color);
+
+    transform: rotate(15deg);
+
+    box-shadow: 5px 5px var(--main-color);
 }
 
-.welcome-orbit--primary {
-  top: 12%;
-  left: -9rem;
-  width: 22rem;
-  aspect-ratio: 1;
-  background: rgb(var(--rgb-violet) / 15%);
+.decoration-three {
+    width: 50px;
+    height: 50px;
+
+    left: 8%;
+    bottom: 12%;
+
+    background: var(--main-color);
+
+    transform: rotate(45deg);
+
+    box-shadow: none;
 }
 
-.welcome-orbit--secondary {
-  bottom: -9rem;
-  left: -2rem;
-  width: 16rem;
-  aspect-ratio: 1;
-  background: rgb(var(--rgb-coral) / 14%);
+.circle {
+    position: absolute;
+
+    border: 2px solid var(--main-color);
+
+    border-radius: 50%;
 }
 
-.welcome-orbit--tertiary {
-  right: 11%;
-  bottom: -12rem;
-  width: 25rem;
-  aspect-ratio: 1;
-  border: 1px solid rgb(var(--rgb-blue) / 18%);
+.circle-one {
+    width: 230px;
+    height: 230px;
+
+    right: 10%;
+    top: -90px;
 }
 
-.welcome-grid {
-  right: 0;
-  bottom: 0;
-  width: 19rem;
-  height: 19rem;
-  opacity: .28;
-  background-image: linear-gradient(rgb(var(--rgb-blue) / 14%) 1px, transparent 1px), linear-gradient(90deg, rgb(var(--rgb-blue) / 14%) 1px, transparent 1px);
-  background-size: 2rem 2rem;
-  mask-image: linear-gradient(to top left, black, transparent 72%);
+.circle-two {
+    width: 90px;
+    height: 90px;
+
+    left: 40%;
+    bottom: -45px;
+
+    background: var(--input-focus);
 }
 
-@media (min-width: 56.25rem) {
-  .welcome-section {
-    min-height: 100vh;
-  }
+.grid-pattern {
+    position: absolute;
 
-  .welcome-inner {
-    gap: clamp(4rem, 12vh, 8rem);
-  }
+    right: 0;
+    bottom: 0;
+
+    width: 320px;
+    height: 320px;
+
+    opacity: 0.12;
+
+    background-image:
+        linear-gradient(
+            var(--main-color) 1px,
+            transparent 1px
+        ),
+        linear-gradient(
+            90deg,
+            var(--main-color) 1px,
+            transparent 1px
+        );
+
+    background-size: 25px 25px;
+
+    mask-image: linear-gradient(
+        to top left,
+        black,
+        transparent
+    );
+}
+
+@media (max-width: 900px) {
+    .welcome-section {
+        min-height: 430px;
+
+        padding: 50px;
+
+        border-right: none;
+
+        border-bottom: 2px solid var(--main-color);
+    }
+
+    h1 {
+        font-size: clamp(50px, 10vw, 80px);
+    }
+
+    .decoration-one {
+        right: -90px;
+    }
+
+    .circle-one {
+        right: -70px;
+    }
+}
+
+@media (max-width: 500px) {
+    .welcome-section {
+        min-height: 390px;
+
+        padding: 35px 25px;
+    }
+
+    .logo {
+        width: 50px;
+        height: 50px;
+
+        margin-bottom: 35px;
+    }
+
+    h1 {
+        font-size: 50px;
+
+        letter-spacing: -2px;
+    }
+
+    .welcome-text {
+        margin-top: 25px;
+
+        font-size: 15px;
+    }
+
+    .decoration-one {
+        right: -120px;
+    }
+
+    .circle-one {
+        right: -100px;
+    }
+}
+
+@media (max-width: 640px) {
+    .welcome-section {
+        display: none;
+    }
 }
 </style>

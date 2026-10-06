@@ -10,35 +10,39 @@ defineProps(['name', 'maxLength', 'minLength', 'type', 'id', 'placeHolder', 'req
 <style>
 .flip-card__input {
     width: 100%;
-    min-height: 44px;
+    height: 46px;
 
-    padding: 0 13px;
+    padding: 5px 12px;
 
-    border: 1px solid transparent;
+    border: 2px solid var(--main-color);
 
-    border-radius: 7px;
+    border-radius: 5px;
 
     outline: none;
 
-    background: var(--color-input);
+    background: var(--bg-color);
 
-    color: var(--color-text);
+    box-shadow: 4px 4px var(--main-color);
 
-    font-family: inherit;
+    color: var(--font-color);
 
-    font-size: 0.875rem;
-    font-weight: 400;
+    font-family: "JetBrains Mono", monospace;
 
-    transition: 0.2s ease;
+    font-size: 13px;
+    font-weight: 600;
+
+    transition: 0.2s;
 }
 
 .flip-card__input::placeholder {
-    color: var(--color-text-faint);
+    color: var(--font-color-sub);
+
+    opacity: 0.7;
 }
 
 .flip-card__input:focus {
-    border-color: var(--color-violet);
+    border-color: var(--input-focus);
 
-    box-shadow: var(--focus-ring);
+    box-shadow: 4px 4px var(--input-focus);
 }
 </style>

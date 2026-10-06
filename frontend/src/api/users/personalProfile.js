@@ -1,50 +1,63 @@
-import { profileData } from "@/data/usersData";
+import { Users, Profile, About } from "@/models/users";
 import { checkSessionResponse } from "@/helpers/auth/auth";
 import { router } from "@/router/router";
 
 export async function getUserData() {
     const resp = await fetch("/api/user", {
         method: "GET",
-        credentials: 'include'
+        credentials: "include"
     });
+
+    const result = await resp.json();
 
     if (!checkSessionResponse(resp)) {
         router.replace("/login");
-        return;
+        return null;
     }
-    const result = await resp.json().catch(() => null)
-    if (!result) {
-        throw new Error('Could not load your profile')
-    }
+
     if (!resp.ok) {
-        throw new Error(result.message || `Registration failed: ${resp.status}`)
+        throw new Error(result.message || `Failed to get user data: ${resp.status}`);
     }
-    profileData.userInfo.id = result.data.UserInfo.ID
-    profileData.userInfo.firstName = result.data.UserInfo.FirstName
-    profileData.userInfo.lastName = result.data.UserInfo.LastName
-    profileData.userInfo.userName = result.data.UserInfo.UserName
-    profileData.userInfo.email = result.data.UserInfo.Email
-    profileData.userInfo.dob = result.data.UserInfo.DOB
-    profileData.userInfo.avatar = result.data.UserInfo.Avatar
-    profileData.userInfo.about = result.data.About.Bio
-    profileData.userInfo.isPrivate = Number(result.data.IsPrivate) === 1 ? 1 : 0
 
-    profileData.numOfFollowers = result.data.NumOfFollowers;
-    profileData.numOfPosts = result.data.NumOfPosts;
-    profileData.numOfFollowing = result.data.NumOfFollowing;
+    const data = result.data;
+    const user = data.UserInfo;
 
-    profileData.about.bio = result.data.About.Bio
-    profileData.about.work = result.data.About.Work
-    profileData.about.education = result.data.About.Education
-    profileData.about.travel = result.data.About.Travel
-    profileData.about.intrests = result.data.About.interests
-    profileData.about.hobbies = result.data.About.Hobbies
-    profileData.about.website = result.data.About.Website
-    profileData.about.linkedin = result.data.About.Linkedin
-    profileData.about.instgram = result.data.About.instagram
-    profileData.about.twitter = result.data.About.Twitter
-    profileData.followers = result.data.Followers;
-    profileData.following = result.data.Following;
-    profileData.friends = result.data.Friends;
-    return result
+    const about = new About(
+        data.About.Bio,
+        data.About.Work,
+        data.About.Education,
+        data.About.Travel,
+        data.About.interests,
+        data.About.Hobbies,
+        data.About.Website,
+        data.About.Linkedin,
+        data.About.instagram,
+        data.About.Twitter
+    );
+
+    const profile = new Profile(
+        data.NumOfFollowing,
+        data.NumOfFollowers,
+        data.NumOfPosts,
+        user.avatar,
+        about,
+        data.Following,
+        data.Followers,
+        data.Friends
+    );
+
+    
+    const userData = new Users(
+        user.ID,
+        user.firstName,
+        user.lastName,
+        user.username,
+        user.email,
+        user.DOB,
+        user.isPrivate,
+        profile
+    );
+    console.log(userData)
+    return userData;
+
 }

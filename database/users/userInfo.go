@@ -2,32 +2,18 @@ package users
 
 import (
 	"database/sql"
-	"errors"
-	"social/internal/helpers"
+	"os"
+
 	"social/internal/models"
 )
 
-/*
-GetUserID retrieves a user's ID using their username or email as the identifier.
-
-Parameters:
-
-	db *sql.DB, identifier string
-
-Returns:
-
-	int
-		-> User ID if successful
-		-> -1 if the user cannot be found or a database error occurs
-*/
 func GetUserID(db *sql.DB, identifier string) int {
 	var id int
 
-	// emails and usernames are saved in lower case, so the login is not case sensitive
 	err := db.QueryRow(`
 		SELECT id
 		FROM user
-		WHERE username = LOWER(?) OR email = LOWER(?)
+		WHERE username = ? OR email = ?
 	`, identifier, identifier).Scan(&id)
 
 	if err != nil {
@@ -37,25 +23,9 @@ func GetUserID(db *sql.DB, identifier string) int {
 	return id
 }
 
-/*
-GetUserData retrieves detailed information about a user, including their
-personal information and profile statistics.
-
-Parameters:
-
-	db *sql.DB, userID int
-
-Returns:
-
-	models.UserData
-		-> Struct containing the user's personal and profile information
-
-	error
-		-> nil if successful
-		-> Error if the user or profile cannot be retrieved
-*/
 func GetUserData(db *sql.DB, userID int) (models.UserData, error) {
 	var userData models.UserData
+
 	var firstName sql.NullString
 	var lastName sql.NullString
 	var email sql.NullString
@@ -77,9 +47,6 @@ func GetUserData(db *sql.DB, userID int) (models.UserData, error) {
 	if err != nil {
 		return userData, err
 	}
-
-	// the frontend needs my id (for example to load my own posts on my profile)
-	userData.UserInfo.ID = userID
 
 	if firstName.Valid {
 		userData.UserInfo.FirstName = firstName.String
@@ -170,116 +137,31 @@ func GetUserData(db *sql.DB, userID int) (models.UserData, error) {
 	return userData, nil
 }
 
-/*
-UpdateUserInfo updates a user's personal information and profile settings.
-
-Parameters:
-
-	db *sql.DB, userID int, userData *models.UserRegistration
-
-Returns:
-
-	error
-	-> nil if successful
-	-> Error if the user or profile cannot be updated
-*/
 func UpdateUserInfo(db *sql.DB, userID int, userData *models.UserRegistration) error {
-	tx, err := db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	_, err = tx.Exec(`
+	_, err := db.Exec(`
 		UPDATE user
-		SET first_name = ?, last_name = ?, email = ?, username = NULLIF(?, ''), updated_at = CURRENT_TIMESTAMP
+		SET first_name = ?, last_name = ?, email = ?, username = ?
 		WHERE id = ?
 	`, userData.FirstName, userData.LastName, userData.Email, userData.UserName, userID)
+
 	if err != nil {
 		return err
 	}
 
-	// the password only changes when a new one was typed (it is already hashed here)
-	if userData.Password != "" {
-		if _, err = tx.Exec(`UPDATE user SET password = ? WHERE id = ?`, userData.Password, userID); err != nil {
-			return err
-		}
-	}
-
-	_, err = tx.Exec(`
+	_, err = db.Exec(`
 		UPDATE profile
 		SET about = ?, is_private = ?
 		WHERE user_id = ?
 	`, userData.About, userData.IsPrivate, userID)
-	if err != nil {
+
+	return err
+}
+
+func UpdateUserAvatar(db *sql.DB, userID int, avatar_path string) error {
+	if err := DeleteOldAvatar(db, userID); err != nil {
 		return err
 	}
 
-	return tx.Commit()
-}
-
-/*
-AcceptPendingRequests is used when a profile turns public: a public profile has
-no follow requests, so everyone who was waiting becomes a follower.
-
-Returns:
-
-	[]int -> the people who were accepted (so they can be told)
-*/
-func AcceptPendingRequests(db *sql.DB, userID int) ([]int, error) {
-	tx, err := db.Begin()
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
-
-	rows, err := tx.Query(`SELECT follower_id FROM user_followers WHERE target_id = ? AND status = 0`, userID)
-	if err != nil {
-		return nil, err
-	}
-	var accepted []int
-	for rows.Next() {
-		var followerID int
-		if err := rows.Scan(&followerID); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		accepted = append(accepted, followerID)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	if _, err = tx.Exec(`UPDATE user_followers SET status = 1 WHERE target_id = ? AND status = 0`, userID); err != nil {
-		return nil, err
-	}
-
-	// the request alerts stay in the list but show as answered
-	if _, err = tx.Exec(`
-		UPDATE notifications SET is_read = 1
-		WHERE user_id = ? AND category = 'requests' AND type = 'follow_request'
-	`, userID); err != nil {
-		return nil, err
-	}
-
-	return accepted, tx.Commit()
-}
-
-/*
-UpdateUserAvatar updates the avatar path for a user.
-
-Parameters:
-
-	db *sql.DB, userID int, avatar_path string
-
-Returns:
-
-	error
-	-> nil if successful
-	-> Error if the avatar path cannot be updated
-*/
-func UpdateUserAvatar(db *sql.DB, userID int, avatar_path string) error {
 	_, err := db.Exec(`
 		UPDATE profile
 		SET avatar_path = ?
@@ -289,19 +171,52 @@ func UpdateUserAvatar(db *sql.DB, userID int, avatar_path string) error {
 	return err
 }
 
-/*
-UserExists checks whether a user with the specified ID exists.
+func DeleteOldAvatar(db *sql.DB, userID int) error {
+	var avatarPath string
 
-Parameters:
+	err := db.QueryRow(`
+		SELECT avatar_path
+		FROM profile
+		WHERE user_id = ?
+	`, userID).Scan(&avatarPath)
 
-	db *sql.DB, userID int
+	if err != nil {
+		return err
+	}
 
-Returns:
+	if avatarPath == "" || avatarPath == "avatars/default.png" {
+		return nil
+	}
 
-	error
-	-> nil if the user exists
-	-> Error if the user does not exist or the database query fails
-*/
+	err = os.Remove("./uploads/" + avatarPath)
+
+	if os.IsNotExist(err) {
+		return nil
+	}
+
+	return err
+}
+
+
+// DeleteUser removes a user's account permanently. Related rows
+// (profile, posts, comments, messages, notifications, etc.) are removed
+// automatically through ON DELETE CASCADE foreign keys.
+func DeleteUser(db *sql.DB, userID int) error {
+	if err := DeleteOldAvatar(db, userID); err != nil {
+		// missing/default avatar should not block account deletion
+		if err != sql.ErrNoRows {
+			return err
+		}
+	}
+
+	_, err := db.Exec(`
+		DELETE FROM user
+		WHERE id = ?
+	`, userID)
+
+	return err
+}
+
 func UserExists(db *sql.DB, userID int) error {
 	var id int
 
@@ -311,25 +226,9 @@ func UserExists(db *sql.DB, userID int) error {
 	).Scan(&id)
 }
 
-/*
-GetUserSimpleData retrieves basic user information, including their
-ID, first name, last name, and avatar.
-
-Parameters:
-
-	db *sql.DB, userID int
-
-Returns:
-
-	models.UserRegistration
-	-> Struct containing the user's basic information
-
-	error
-	-> nil if successful
-	-> Error if the user or profile cannot be retrieved
-*/
 func GetUserSimpleData(db *sql.DB, userID int) (models.UserRegistration, error) {
 	var user models.UserRegistration
+
 	var firstName sql.NullString
 	var lastName sql.NullString
 
@@ -378,97 +277,4 @@ func GetUserSimpleData(db *sql.DB, userID int) (models.UserRegistration, error) 
 	}
 
 	return user, nil
-}
-
-/*
-DeleteUser permanently deletes a user from the database. also delete the avatar if its not the default.
-
-Parameters:
-
-	db *sql.DB, userID int
-
-Returns:
-
-	error
-	-> nil if successful
-	-> Error if the user cannot be deleted
-*/
-func DeleteUser(db *sql.DB, userID int) error {
-	var avatar string
-	if err := db.QueryRow(`select avatar_path from profile where user_id = ?`, userID).Scan(&avatar); err != nil {
-		return err
-	}
-
-	tx, err := db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	// follows have no foreign key, remove them here so the other people's
-	// follower and following numbers go down (the triggers do that)
-	if _, err := tx.Exec(`DELETE FROM user_followers WHERE follower_id = ? OR target_id = ?`, userID, userID); err != nil {
-		return err
-	}
-
-	// groups i created cannot live without their owner
-	if _, err := tx.Exec(`DELETE FROM groups WHERE creator_id = ?`, userID); err != nil {
-		return err
-	}
-
-	if _, err := tx.Exec(`DELETE FROM user WHERE id = ?`, userID); err != nil {
-		return err
-	}
-
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-
-	// the account is gone, a missing avatar file should not matter anymore
-	if avatar != "avatars/default.png" {
-		_ = helpers.DeleteAvatar(avatar)
-	}
-
-	return nil
-}
-
-/*
-DeleteUserAvatar replaces the user's current avatar with the default avatar.
-
-Parameters:
-
-	db *sql.DB, userID int
-
-Returns:
-
-	string
-	-> Path of the previous avatar
-
-	error
-	-> nil if successful
-	-> Error if the avatar cannot be retrieved or updated
-	-> Error if the user is already using the default avatar
-*/
-func DeleteUserAvatar(db *sql.DB, userID int) (string, error) {
-	var path string
-
-	if err := db.QueryRow(`
-		SELECT avatar_path
-		FROM profile
-		WHERE user_id = ?
-	`, userID).Scan(&path); err != nil {
-		return "", err
-	}
-
-	if path == "avatars/default.png" {
-		return "", errors.New("user does not have an avatar")
-	}
-
-	_, err := db.Exec(`
-		UPDATE profile
-		SET avatar_path = 'avatars/default.png'
-		WHERE user_id = ?
-	`, userID)
-
-	return path, err
 }

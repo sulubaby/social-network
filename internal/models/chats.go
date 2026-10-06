@@ -1,39 +1,33 @@
 package models
 
-type ChatUser struct {
-	ID         int64  `json:"id"`
-	Username   string `json:"username"`
-	FirstName  string `json:"firstName"`
-	LastName   string `json:"lastName"`
-	AvatarPath string `json:"avatarPath"`
+import "time"
+
+type ChatList struct {
+	ID      int
+	Members []UserRegistration
+	Name    string
+	Avatar  string
 }
 
-type ChatConversation struct {
-	ID                int64    `json:"id"`
-	Type              string   `json:"type"`
-	OtherUser         ChatUser `json:"otherUser"`
-	LatestMessage     string   `json:"latestMessage"`
-	LatestMessageTime string   `json:"latestMessageTime"`
+type PrivateChat struct {
+	UserID    int
+	GroupID   int
+	Avatar    string
+	FirstName string
+	LastName  string
 }
 
-type ChatCandidate struct {
-	ChatUser
-	ChatID *int64 `json:"chatId"`
+type Message struct {
+	ID        int
+	Sender    UserRegistration
+	GroupID   int
+	Content   string `json:"content"`
+	CreatedAt time.Time
 }
 
-type ChatMessage struct {
-	ID         int64  `json:"id"`
-	ChatID     int64  `json:"chatId"`
-	SenderID   int64  `json:"senderId"`
-	Username   string `json:"username"`
-	FirstName  string `json:"firstName"`
-	LastName   string `json:"lastName"`
-	AvatarPath string `json:"avatarPath"`
-	Content    string `json:"content"`
-	CreatedAt  string `json:"createdAt"`
-	IsOwn      bool   `json:"isOwn"`
-	// only filled on live events so the page knows where a message belongs
-	ChatType   string `json:"chatType,omitempty"`
-	GroupID    int64  `json:"groupId,omitempty"`
-	GroupTitle string `json:"groupTitle,omitempty"`
+type SentPost struct {
+	PostID int `json:"postID"`
+	UserID int `json:"userID"`
+	RecieverID int `json:"recieverID"`
 }
+

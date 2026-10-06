@@ -6,36 +6,12 @@ import (
 	"log"
 	"net/http"
 	"social/database/users"
+	"social/internal/app/tokens"
 	"social/internal/helpers"
 	"social/internal/models"
 	"time"
 )
 
-/*
-Handler used to log a user into their account.
-
-Method:
-    POST
-
--> Data provided must match the json format provided in models.UserLogger
-
--> The identifier can be the user's username or email.
-
--> The password provided will be compared with the hashed password stored in the database.
-
--> in case of error there will be a respond written back and can me checked by
- - status boolean
- - message string
-
--> in case of success a respond will be written back
- - status must be true
- - message: success message
-
--> a session will be saved in the sessions table and its id stored in a HTTP-only cookie
- - cookie name: token
- - with "keep me signed in" the session lasts 30 days, without it the cookie
-   is gone when the browser closes (and the session ends after one day)
-*/
 func (app *App) LoggingUser(w http.ResponseWriter, r *http.Request) {
 	var logger models.UserLogger
 
@@ -64,7 +40,7 @@ func (app *App) LoggingUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-
+	
 	if match := helpers.AuthonticateUser(logger.Pass, hashedPassword); !match {
 		helpers.WriteJson(w, http.StatusUnauthorized, map[string]any{
 			"status":  false,
@@ -82,34 +58,25 @@ func (app *App) LoggingUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// "keep me signed in" keeps the session for 30 days. without it the
-	// cookie is gone when the browser closes and the session ends after a day
-	remember := logger.Remember == nil || *logger.Remember
-	ttl := 24 * time.Hour
-	if remember {
-		ttl = 30 * 24 * time.Hour
-	}
-
-	sessionID, err := users.CreateSession(app.DB, userID, ttl)
+	token, err := tokens.GenerateToken(userID)
 	if err != nil {
 		log.Println(err)
 		helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
 			"status":  false,
-			"message": "could not create session",
+			"message": "could not create authentication token",
 		})
 		return
 	}
 
 	cookie := http.Cookie{
 		Name:     "token",
-		Value:    sessionID,
+		Value:    token,
 		Path:     "/",
+		Expires:  time.Now().Add(24 * 30 * time.Hour),
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 	}
-	if remember {
-		cookie.Expires = time.Now().Add(ttl)
-	}
+
 	http.SetCookie(w, &cookie)
 
 	helpers.WriteJson(w, http.StatusOK, map[string]any{
@@ -118,7 +85,6 @@ func (app *App) LoggingUser(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// this function should be deleted, it is used but wrongly
 func (app *App) AuthorizeSession(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -129,48 +95,13 @@ func (app *App) AuthorizeSession(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-/*
-Handler used to authorize the current user's session.
-
-Method:
-    GET
-
--> no data should be provided
-
--> this handler should only be called after the authentication middleware
-   has verified the user's session.
-
--> in case of error there will be a respond written back and can me checked by
- - status boolean
- - message string
-
--> in case of success a respond will be written back
- - status must be true
- - message: valid session
-
--> This handler should not be used directly for authentication.
-   The authentication middleware should be responsible for validating
-   the session.
-*/
 func (app *App) DeleteSession(w http.ResponseWriter, r *http.Request) {
-	if cookie, err := r.Cookie("token"); err == nil {
-		userID, findErr := users.SessionUser(app.DB, cookie.Value)
-		if findErr == nil && app.Realtime != nil {
-			app.Realtime.DisconnectUser(userID)
-		}
-		// delete the session so this cookie can never be used again
-		if delErr := users.DeleteSession(app.DB, cookie.Value); delErr != nil {
-			log.Println(delErr)
-		}
-	}
 
 	http.SetCookie(w, &http.Cookie{
-		Name:     "token",
-		Value:    "",
-		MaxAge:   -1,
-		Path:     "/",
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
+		Name:   "token",
+		Value:  "",
+		MaxAge: -1,
+		Path:   "/",
 	})
 
 	helpers.WriteJson(w, http.StatusOK, map[string]any{

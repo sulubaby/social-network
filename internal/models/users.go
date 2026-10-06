@@ -5,23 +5,21 @@ import (
 )
 
 type UserRegistration struct {
-	ID        int
-	FirstName string
-	LastName  string
-	UserName  string
-	Email     string
-	About     string
-	DOB       time.Time
-	Password  string
-	Avatar    string
-	IsPrivate int
+	ID        int       `json:"ID"`
+	FirstName string    `json:"firstName"`
+	LastName  string    `json:"lastName"`
+	UserName  string    `json:"username"`
+	Email     string    `json:"email"`
+	About     string    `json:"about"`
+	DOB       time.Time `json:"DOB"`
+	Password  string    `json:"password"`
+	Avatar    string    `json:"avatar"`
+	IsPrivate int       `json:"isPrivate"`
 }
 
 type UserLogger struct {
 	Identifier string
 	Pass       string
-	// false means the cookie only lives until the browser is closed
-	Remember *bool
 }
 
 type UserData struct {

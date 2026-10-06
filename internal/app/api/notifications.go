@@ -1,410 +1,429 @@
-// handlers for the notifications page:
-// GET the list, mark one/all as read, and do the actions (accept, decline, join...)
 package api
 
 import (
 	"database/sql"
-	"encoding/json"
-	"errors"
+	"log"
 	"net/http"
-	"social/database/events"
-	"social/database/groups"
 	"social/database/notifications"
-	"social/database/profiles"
 	"social/internal/helpers"
-	"social/internal/models"
 	"strconv"
 )
 
-// Notifications handles GET /api/notifications
-// returns one page of the users notifications + the unread count
-func (app App) Notifications(w http.ResponseWriter, r *http.Request) {
+func (app *App) GetNotification(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(int)
+
 	if !ok {
 		helpers.WriteJson(w, http.StatusUnauthorized, map[string]any{
 			"status":  false,
-			"message": "authentication required",
+			"message": "could not authorize user",
 		})
 		return
 	}
 
-	if r.Method != http.MethodGet {
-		w.Header().Set("Allow", http.MethodGet)
-		helpers.WriteJson(w, http.StatusMethodNotAllowed, map[string]any{
-			"status":  false,
-			"message": "method not allowed",
-		})
-		return
+	offset := 0
+
+	if value := r.URL.Query().Get("offset"); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil && parsed >= 0 {
+			offset = parsed
+		}
 	}
 
-	// read limit and offset from the url
-	page, err := parsePage(r)
+	rows, err := app.DB.Query(`
+		SELECT
+			n.id,
+			n.message,
+			n.created_at,
+			n.is_read,
+			nt.notifications_id,
+			nt.post_id_tag,
+			nt.comment_id_tag,
+			nt.comment_reply_user_id,
+			nt.follow_request_user_id,
+			nt.follow_request_accept_user_id,
+			nt.follow_user_id,
+			nt.post_like_user_id,
+			nt.post_dislike_user_id,
+			nt.comment_like_user_id,
+			nt.comment_mention_user_id,
+			nt.post_mention_user_id,
+			nt.event_invite_user_id,
+			nt.event_response_user_id,
+			nt.group_invite_user_id,
+			nt.group_join_user_id,
+			nt.group_accept_user_id,
+			nt.group_id,
+			nt.event_id,
+			ge.title,
+			ge.event_time,
+			actor.id,
+			actor.first_name,
+			actor.last_name,
+			actor_profile.avatar_path,
+			p.id,
+			p.content,
+			p.image_path,
+			c.content,
+			c.votes,
+			gr.name,
+			gr.avatar
+		FROM notifications n
+		JOIN notifications_types nt
+			ON nt.notifications_id = n.id
+		LEFT JOIN user actor
+			ON actor.id = COALESCE(
+				nt.comment_reply_user_id,
+				nt.follow_request_user_id,
+				nt.follow_request_accept_user_id,
+				nt.follow_user_id,
+				nt.post_like_user_id,
+				nt.post_dislike_user_id,
+				nt.comment_like_user_id,
+				nt.comment_mention_user_id,
+				nt.post_mention_user_id,
+				nt.event_invite_user_id,
+				nt.event_response_user_id,
+				nt.group_invite_user_id,
+				nt.group_join_user_id,
+				nt.group_accept_user_id
+			)
+		LEFT JOIN profile actor_profile
+			ON actor_profile.user_id = actor.id
+		LEFT JOIN posts p
+			ON p.id = nt.post_id_tag
+		LEFT JOIN comments c
+			ON c.id = nt.comment_id_tag
+		LEFT JOIN groups gr
+			ON gr.id = nt.group_id
+		LEFT JOIN group_events ge
+			ON ge.id = nt.event_id
+		WHERE n.user_id = ?
+			AND nt.message_user_id IS NULL
+		ORDER BY n.created_at DESC, n.id DESC
+		LIMIT 20 OFFSET ?
+	`, userID, offset)
+
 	if err != nil {
-		helpers.WriteJson(w, http.StatusBadRequest, map[string]any{
-			"status":  false,
-			"message": "limit must be between 1 and 50 and offset cannot be negative",
-		})
-		return
-	}
-
-	category := r.URL.Query().Get("category")
-	// we ask for one extra row so we know if there is another page (hasMore)
-	result, err := notifications.List(app.DB, userID, category, page.Limit+1, page.Offset)
-	if errors.Is(err, notifications.ErrInvalidCategory) {
-		helpers.WriteJson(w, http.StatusBadRequest, map[string]any{
-			"status":  false,
-			"message": err.Error(),
-		})
-		return
-	}
-	if err != nil {
+		log.Println(err)
 		helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
 			"status":  false,
-			"message": "could not load notifications",
+			"message": "could not get notifications",
 		})
 		return
 	}
-	result, hasMore := trimPage(result, page, true)
+	defer rows.Close()
 
-	unreadCount, err := notifications.UnreadCount(app.DB, userID, category)
-	if err != nil {
+	notifications := []map[string]any{}
+
+	for rows.Next() {
+		var (
+			id                        int
+			message                   string
+			createdAt                 string
+			isRead                    int
+			notificationsID           int
+			postIDTag                 sql.NullInt64
+			commentIDTag              sql.NullInt64
+			commentReplyUserID        sql.NullInt64
+			followRequestUserID       sql.NullInt64
+			followRequestAcceptUserID sql.NullInt64
+			followUserID              sql.NullInt64
+			postLikeUserID            sql.NullInt64
+			postDislikeUserID         sql.NullInt64
+			commentLikeUserID         sql.NullInt64
+			commentMentionUserID      sql.NullInt64
+			postMentionUserID         sql.NullInt64
+			eventInviteUserID         sql.NullInt64
+			eventResponseUserID       sql.NullInt64
+			groupInviteUserID         sql.NullInt64
+			groupJoinUserID           sql.NullInt64
+			groupAcceptUserID         sql.NullInt64
+			groupID                   sql.NullInt64
+			eventID                   sql.NullInt64
+			eventTitle                sql.NullString
+			eventTime                 sql.NullString
+			actorID                   sql.NullInt64
+			actorFirstName            sql.NullString
+			actorLastName             sql.NullString
+			actorAvatarPath           sql.NullString
+			postID                    sql.NullInt64
+			postContent               sql.NullString
+			postImagePath             sql.NullString
+			commentContent            sql.NullString
+			commentVotes              sql.NullInt64
+			groupName                 sql.NullString
+			groupAvatar               sql.NullString
+		)
+
+		err := rows.Scan(
+			&id,
+			&message,
+			&createdAt,
+			&isRead,
+			&notificationsID,
+			&postIDTag,
+			&commentIDTag,
+			&commentReplyUserID,
+			&followRequestUserID,
+			&followRequestAcceptUserID,
+			&followUserID,
+			&postLikeUserID,
+			&postDislikeUserID,
+			&commentLikeUserID,
+			&commentMentionUserID,
+			&postMentionUserID,
+			&eventInviteUserID,
+			&eventResponseUserID,
+			&groupInviteUserID,
+			&groupJoinUserID,
+			&groupAcceptUserID,
+			&groupID,
+			&eventID,
+			&eventTitle,
+			&eventTime,
+			&actorID,
+			&actorFirstName,
+			&actorLastName,
+			&actorAvatarPath,
+			&postID,
+			&postContent,
+			&postImagePath,
+			&commentContent,
+			&commentVotes,
+			&groupName,
+			&groupAvatar,
+		)
+
+		if err != nil {
+			log.Println(err)
+			helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
+				"status":  false,
+				"message": "could not read notifications",
+			})
+			return
+		}
+
+		notification := map[string]any{
+			"id":         id,
+			"message":    message,
+			"created_at": createdAt,
+			"is_read":    isRead == 1,
+		}
+
+		if postIDTag.Valid {
+			notification["post_id"] = postIDTag.Int64
+		}
+
+		if commentReplyUserID.Valid {
+			notification["comment_reply_user_id"] = commentReplyUserID.Int64
+		}
+
+		if followRequestUserID.Valid {
+			notification["follow_request_user_id"] = followRequestUserID.Int64
+		}
+
+		if followRequestAcceptUserID.Valid {
+			notification["follow_request_accept_user_id"] = followRequestAcceptUserID.Int64
+		}
+
+		if followUserID.Valid {
+			notification["follow_user_id"] = followUserID.Int64
+		}
+
+		if postLikeUserID.Valid {
+			notification["post_like_user_id"] = postLikeUserID.Int64
+		}
+
+		if postDislikeUserID.Valid {
+			notification["post_dislike_user_id"] = postDislikeUserID.Int64
+		}
+
+		if commentLikeUserID.Valid {
+			notification["comment_like_user_id"] = commentLikeUserID.Int64
+		}
+
+		if commentMentionUserID.Valid {
+			notification["comment_mention_user_id"] = commentMentionUserID.Int64
+		}
+
+		if postMentionUserID.Valid {
+			notification["post_mention_user_id"] = postMentionUserID.Int64
+		}
+
+		if eventInviteUserID.Valid {
+			notification["event_invite_user_id"] = eventInviteUserID.Int64
+		}
+
+		if eventResponseUserID.Valid {
+			notification["event_response_user_id"] = eventResponseUserID.Int64
+		}
+
+		if groupInviteUserID.Valid {
+			notification["group_invite_user_id"] = groupInviteUserID.Int64
+		}
+
+		if groupJoinUserID.Valid {
+			notification["group_join_user_id"] = groupJoinUserID.Int64
+		}
+
+		if groupAcceptUserID.Valid {
+			notification["group_accept_user_id"] = groupAcceptUserID.Int64
+		}
+
+		if eventID.Valid {
+			notification["event"] = map[string]any{
+				"id":        eventID.Int64,
+				"title":     eventTitle.String,
+				"eventTime": eventTime.String,
+			}
+		}
+
+		if groupID.Valid {
+			notification["group"] = map[string]any{
+				"id":     groupID.Int64,
+				"name":   groupName.String,
+				"avatar": groupAvatar.String,
+			}
+		}
+
+		if actorID.Valid {
+			notification["actor"] = map[string]any{
+				"id":         actorID.Int64,
+				"firstName":  actorFirstName.String,
+				"lastName":   actorLastName.String,
+				"avatarPath": actorAvatarPath.String,
+			}
+		}
+
+		if postID.Valid {
+			notification["post"] = map[string]any{
+				"id":        postID.Int64,
+				"content":   postContent.String,
+				"imagePath": postImagePath.String,
+			}
+		}
+
+		if commentIDTag.Valid && commentContent.Valid {
+			notification["comment"] = commentContent.String
+			notification["comment_likes"] = commentVotes.Int64
+		}
+
+		notifications = append(notifications, notification)
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Println(err)
 		helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
 			"status":  false,
-			"message": "could not load notification count",
+			"message": "could not read notifications",
 		})
 		return
 	}
 
 	helpers.WriteJson(w, http.StatusOK, map[string]any{
 		"status":        true,
-		"notifications": result,
-		"unreadCount":   unreadCount,
-		"hasMore":       hasMore,
-		"nextOffset":    page.Offset + len(result),
+		"notifications": notifications,
+		"offset":        offset,
+		"limit":         20,
+		"hasMore":       len(notifications) == 20,
 	})
 }
 
-// MarkNotificationRead handles PATCH /api/notifications/{id}/read
-func (app App) MarkNotificationRead(w http.ResponseWriter, r *http.Request) {
+func (app *App) GetUnreadNotificationCount(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(int)
+
 	if !ok {
 		helpers.WriteJson(w, http.StatusUnauthorized, map[string]any{
 			"status":  false,
-			"message": "authentication required",
+			"message": "could not authorize user",
 		})
 		return
 	}
 
-	if r.Method != http.MethodPatch {
-		w.Header().Set("Allow", http.MethodPatch)
-		helpers.WriteJson(w, http.StatusMethodNotAllowed, map[string]any{
-			"status":  false,
-			"message": "method not allowed",
-		})
-		return
-	}
+	count, err := notifications.GetUnreadCount(app.DB, userID)
 
-	notificationID, err := strconv.ParseInt(r.PathValue("notificationID"), 10, 64)
-	if err != nil || notificationID <= 0 {
-		helpers.WriteJson(w, http.StatusBadRequest, map[string]any{
-			"status":  false,
-			"message": "invalid notification id",
-		})
-		return
-	}
-
-	if err := notifications.MarkRead(app.DB, userID, notificationID); err != nil {
-		helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
-			"status":  false,
-			"message": "could not mark notification as read",
-		})
-		return
-	}
-
-	helpers.WriteJson(w, http.StatusOK, map[string]any{"status": true})
-}
-
-// MarkAllNotificationsRead handles PATCH /api/notifications/read-all
-func (app App) MarkAllNotificationsRead(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value("userID").(int)
-	if !ok {
-		helpers.WriteJson(w, http.StatusUnauthorized, map[string]any{
-			"status":  false,
-			"message": "authentication required",
-		})
-		return
-	}
-
-	if r.Method != http.MethodPatch {
-		w.Header().Set("Allow", http.MethodPatch)
-		helpers.WriteJson(w, http.StatusMethodNotAllowed, map[string]any{
-			"status":  false,
-			"message": "method not allowed",
-		})
-		return
-	}
-
-	if err := notifications.MarkAllRead(app.DB, userID); err != nil {
-		helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
-			"status":  false,
-			"message": "could not mark notifications as read",
-		})
-		return
-	}
-
-	helpers.WriteJson(w, http.StatusOK, map[string]any{"status": true})
-}
-
-// body for the action request, like {"action": "accept"}
-type notificationActionRequest struct {
-	Action string `json:"action"`
-}
-
-// ApplyNotificationAction handles PATCH /api/notifications/{id}/action
-// this is when the user clicks a button inside a notification (accept, decline, join, rsvp)
-func (app App) ApplyNotificationAction(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value("userID").(int)
-	if !ok {
-		helpers.WriteJson(w, http.StatusUnauthorized, map[string]any{
-			"status":  false,
-			"message": "authentication required",
-		})
-		return
-	}
-
-	if r.Method != http.MethodPatch {
-		w.Header().Set("Allow", http.MethodPatch)
-		helpers.WriteJson(w, http.StatusMethodNotAllowed, map[string]any{
-			"status":  false,
-			"message": "method not allowed",
-		})
-		return
-	}
-
-	notificationID, err := strconv.ParseInt(
-		r.PathValue("notificationID"),
-		10,
-		64,
-	)
-	if err != nil || notificationID <= 0 {
-		helpers.WriteJson(w, http.StatusBadRequest, map[string]any{
-			"status":  false,
-			"message": "invalid notification id",
-		})
-		return
-	}
-
-	var request notificationActionRequest
-	// read the body, small size limit and no unknown fields
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2<<10))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&request); err != nil {
-		helpers.WriteJson(w, http.StatusBadRequest, map[string]any{
-			"status":  false,
-			"message": "invalid notification action",
-		})
-		return
-	}
-
-	// make sure the notification exists and is mine
-	notification, err := notifications.GetByID(app.DB, userID, notificationID)
-	if errors.Is(err, sql.ErrNoRows) {
-		helpers.WriteJson(w, http.StatusNotFound, map[string]any{
-			"status":  false,
-			"message": "notification not found",
-		})
-		return
-	}
 	if err != nil {
+		log.Println(err)
 		helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
 			"status":  false,
-			"message": "could not load notification",
-		})
-		return
-	}
-
-	// do the actual action, not found errors become 404
-	if err := app.applyNotificationAction(userID, notification, request.Action); err != nil {
-		status := http.StatusBadRequest
-		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, groups.ErrGroupNotFound) || errors.Is(err, groups.ErrInvitationNotFound) || errors.Is(err, events.ErrEventNotFound) {
-			status = http.StatusNotFound
-		}
-		helpers.WriteJson(w, status, map[string]any{
-			"status":  false,
-			"message": err.Error(),
-		})
-		return
-	}
-
-	// after the action is done the notification counts as read
-	if err := notifications.MarkRead(app.DB, userID, notificationID); err != nil {
-		helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
-			"status":  false,
-			"message": "action completed but notification could not be marked read",
+			"message": "could not get unread count",
 		})
 		return
 	}
 
 	helpers.WriteJson(w, http.StatusOK, map[string]any{
 		"status": true,
-		"action": request.Action,
+		"count":  count,
 	})
 }
 
-// applyNotificationAction decides what to do based on the category and type
-// of the notification and the button the user clicked
-func (app App) applyNotificationAction(userID int, notification models.Notification, action string) error {
+func (app *App) MarkNotificationsRead(w http.ResponseWriter, r *http.Request) {
+	userID, ok := r.Context().Value("userID").(int)
 
-	switch notification.Category {
-
-	// follow requests: accept or decline
-	case "requests":
-		if notification.Type != "follow_request" || notification.ActorID == nil {
-			return errors.New("this request cannot be acted on")
-		}
-
-		switch action {
-		case "accept":
-			if err := profiles.DecideFollowRequest(
-				app.DB,
-				userID,
-				*notification.ActorID,
-				true,
-			); err != nil {
-				return err
-			}
-			app.notify(*notification.ActorID, userID, "requests", "follow_accepted", app.userFullName(userID)+" accepted your follow request", nil)
-			return nil
-
-		case "decline":
-			return profiles.DecideFollowRequest(
-				app.DB,
-				userID,
-				*notification.ActorID,
-				false,
-			)
-
-		default:
-			return errors.New("request action must be accept or decline")
-		}
-
-	// group stuff: join requests (for the group owner) and invitations (for the invited user)
-	case "groups":
-		if notification.RelatedID == nil {
-			return errors.New("group notification is missing its group")
-		}
-
-		switch notification.Type {
-
-		// find which group the request is for, only if its still pending
-		case "join_request":
-			if notification.ActorID == nil {
-				return errors.New("join request is missing requester")
-			}
-
-			var groupID int64
-			err := app.DB.QueryRow(`
-				SELECT group_id
-				FROM group_join_requests
-				WHERE id = ?
-				  AND user_id = ?
-				  AND status = 'pending'
-			`, *notification.RelatedID, *notification.ActorID).Scan(&groupID)
-			if err != nil {
-				return err
-			}
-
-			switch action {
-			case "accept":
-				if err := groups.AcceptJoinRequest(
-					app.DB,
-					userID,
-					*notification.ActorID,
-					groupID,
-				); err != nil {
-					return err
-				}
-				app.notify(*notification.ActorID, userID, "groups", "join_accepted", "Your request to join "+app.groupTitle(groupID)+" was accepted", int64Ptr(groupID))
-				return nil
-
-			case "reject":
-				if err := groups.RejectJoinRequest(
-					app.DB,
-					userID,
-					*notification.ActorID,
-					groupID,
-				); err != nil {
-					return err
-				}
-				app.notify(*notification.ActorID, userID, "groups", "join_rejected", "Your request to join "+app.groupTitle(groupID)+" was declined", int64Ptr(groupID))
-				return nil
-
-			default:
-				return errors.New(
-					"join request action must be accept or reject",
-				)
-			}
-
-		// someone invited me to a group
-		case "invitation":
-			switch action {
-			case "join":
-				groupID, inviterID, err := groups.AcceptInvitation(
-					app.DB,
-					userID,
-					*notification.RelatedID,
-				)
-				if err != nil {
-					return err
-				}
-				app.notify(inviterID, userID, "groups", "invitation_accepted", app.userFullName(userID)+" accepted your invitation to "+app.groupTitle(groupID), int64Ptr(groupID))
-				return nil
-
-			case "decline":
-				return groups.DeclineInvitation(
-					app.DB,
-					userID,
-					*notification.RelatedID,
-				)
-
-			default:
-				return errors.New(
-					"invitation action must be join or decline",
-				)
-			}
-
-		default:
-			return errors.New("unsupported group notification type")
-		}
-
-	// new event in my group: going or not going
-	case "events":
-		if notification.RelatedID == nil {
-			return errors.New("event notification is missing its event")
-		}
-
-		switch action {
-		case "rsvp":
-			return events.SetRSVP(
-				app.DB,
-				userID,
-				*notification.RelatedID,
-				"going",
-			)
-
-		case "decline":
-			return events.SetRSVP(
-				app.DB,
-				userID,
-				*notification.RelatedID,
-				"declined",
-			)
-
-		default:
-			return errors.New("event action must be rsvp or decline")
-		}
-
-	default:
-		return errors.New("unsupported notification category")
+	if !ok {
+		helpers.WriteJson(w, http.StatusUnauthorized, map[string]any{
+			"status":  false,
+			"message": "could not authorize user",
+		})
+		return
 	}
+
+	if err := notifications.MarkAllRead(app.DB, userID); err != nil {
+		log.Println(err)
+		helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
+			"status":  false,
+			"message": "could not mark notifications read",
+		})
+		return
+	}
+
+	helpers.WriteJson(w, http.StatusOK, map[string]any{
+		"status": true,
+	})
+}
+
+func (app *App) MarkNotificationRead(w http.ResponseWriter, r *http.Request) {
+	userID, ok := r.Context().Value("userID").(int)
+
+	if !ok {
+		helpers.WriteJson(w, http.StatusUnauthorized, map[string]any{
+			"status":  false,
+			"message": "could not authorize user",
+		})
+		return
+	}
+
+	notificationID, err := strconv.Atoi(r.PathValue("id"))
+
+	if err != nil || notificationID <= 0 {
+		helpers.WriteJson(w, http.StatusBadRequest, map[string]any{
+			"status":  false,
+			"message": "invalid notification",
+		})
+		return
+	}
+
+	if err := notifications.MarkRead(app.DB, userID, notificationID); err != nil {
+		log.Println(err)
+		helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
+			"status":  false,
+			"message": "could not mark notification read",
+		})
+		return
+	}
+
+	count, err := notifications.GetUnreadCount(app.DB, userID)
+
+	if err != nil {
+		log.Println(err)
+		helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
+			"status":  false,
+			"message": "could not get unread count",
+		})
+		return
+	}
+
+	helpers.WriteJson(w, http.StatusOK, map[string]any{
+		"status": true,
+		"count":  count,
+	})
 }

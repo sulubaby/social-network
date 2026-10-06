@@ -1,1 +1,0 @@
-drop table if exists group_join_requests;

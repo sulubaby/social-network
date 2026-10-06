@@ -1,9 +1,9 @@
 export async function getFriends(searchValue = "", targetId, offset = 0) {
     const params = new URLSearchParams({
         search: searchValue,
+        targetid: targetId,
         offset: offset.toString()
     });
-    if (targetId) params.set('targetid', targetId);
 
     const resp = await fetch(`/api/friends?${params.toString()}`, {
         method: "GET",
@@ -15,7 +15,6 @@ export async function getFriends(searchValue = "", targetId, offset = 0) {
     }
 
     const result = await resp.json();
-
     if (!result.status) {
         throw new Error("could not fetch data");
     }

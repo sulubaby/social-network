@@ -1,72 +1,26 @@
 import { checkSessionResponse } from "@/helpers/auth/auth";
-import { forgetSession, router } from "@/router/router";
-import { disconnectRealtime } from "@/services/realtime";
+import { router } from "@/router/router";
 
-function buildError(data, status, fallback) {
-  const error = new Error(data?.message || fallback)
+async function parseResponse(resp, fallback) {
+    let result = {}
 
-  error.status = status
-  error.attemptsLeft = data?.attemptsLeft
-  error.retryAfter = data?.retryAfter
+    try {
+        result = await resp.json()
+    } catch {
+        result = {}
+    }
 
-  return error
-}
+    if (!resp.ok) {
+        const error = new Error(result.message || `${fallback}: ${resp.status}`)
 
-export async function checkRegistration(type, input) {
-  const response = await fetch('/api/user/registration', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      type,
-      input,
-    }),
-  })
+        error.status = resp.status
+        error.retryAfter = result.retryAfter
+        error.attemptsLeft = result.attemptsLeft
 
-  const data = await response.json()
+        throw error
+    }
 
-  if (!response.ok) {
-    throw new Error(data.message || 'Could not check availability')
-  }
-
-  return data
-}
-
-export async function sendEmailCode(email) {
-  const response = await fetch('/api/user/send-email-code', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ email }),
-  })
-
-  const data = await response.json().catch(() => ({}))
-
-  if (!response.ok) {
-    throw buildError(data, response.status, 'Could not send verification code')
-  }
-
-  return data
-}
-
-export async function verifyEmailCode(email, code) {
-  const response = await fetch('/api/user/verify-email-code', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ email, code }),
-  })
-
-  const data = await response.json().catch(() => ({}))
-
-  if (!response.ok) {
-    throw buildError(data, response.status, 'Could not verify code')
-  }
-
-  return data
+    return result
 }
 
 export async function registerUser(userData) {
@@ -75,13 +29,35 @@ export async function registerUser(userData) {
         body: userData
     })
 
-    const result = await resp.json().catch(() => ({}))
+    return parseResponse(resp, "Registration failed")
+}
 
-    if (!resp.ok) {
-        throw buildError(result, resp.status, `Registration failed: ${resp.status}`)
-    }
+export async function checkRegistration(type, value) {
+    const params = new URLSearchParams({ type, value })
 
-    return result
+    const resp = await fetch(`/api/registration/check?${params}`)
+
+    return parseResponse(resp, "Check failed")
+}
+
+export async function sendEmailCode(email) {
+    const resp = await fetch("/api/email/code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email })
+    })
+
+    return parseResponse(resp, "Could not send code")
+}
+
+export async function verifyEmailCode(email, code) {
+    const resp = await fetch("/api/email/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, code })
+    })
+
+    return parseResponse(resp, "Verification failed")
 }
 
 export async function loggingSession(userLogger) {
@@ -97,8 +73,6 @@ export async function loggingSession(userLogger) {
         throw new Error(result.message || `Logging failed: ${resp.status}`)
     }
 
-    // the new cookie is set, the router has to check again
-    forgetSession()
     return result
 }
 
@@ -109,10 +83,7 @@ export async function logout() {
     });
     
     if(!checkSessionResponse(resp)) {
-        disconnectRealtime()
-        forgetSession()
         router.push("/login");
-        return
     }
 
     if (!resp.ok && resp.status != 401) {
@@ -120,8 +91,6 @@ export async function logout() {
         
     }
 
-    disconnectRealtime()
-    forgetSession()
     router.push("/login")
 }
 

@@ -1,62 +1,92 @@
-import { checkSessionResponse } from '@/helpers/auth/auth'
-import { router } from '@/router/router'
+import { buildCommentRequest } from '@/helpers/commentMedia';
 
-// helper for the comment requests: sends the cookie, handles logout and errors
-async function requestComments(url, options = {}) {
-  const response = await fetch(url, {
-    credentials: 'include',
-    ...options,
-  })
+export async function getComments(postId, replyTo = null) {
+    const params = new URLSearchParams();
 
-  if (!checkSessionResponse(response)) {
-    router.replace('/login')
-    return
-  }
+    params.append('postId', postId.toString());
 
-  const result = await response.json()
-  if (!response.ok) {
-    throw new Error(result.message || 'Could not load comments')
-  }
+    if (replyTo !== null) {
+        params.append('replyTo', replyTo.toString());
+    }
 
-  return result
+    const response = await fetch(
+        `/api/post/comment?${params.toString()}`,
+        {
+            method: 'GET',
+            credentials: 'include'
+        }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok || !data.status) {
+        throw new Error(
+            data.message || 'Failed to load comments'
+        );
+    }
+
+    console.log(data.comments)
+    return data.comments || [];
 }
 
-// get one page of comments of a post
-export async function getComments(postId, { limit = 20, offset = 0 } = {}) {
-  const params = new URLSearchParams({
-    limit: String(limit),
-    offset: String(offset),
-  })
+export async function addComment(
+    postId,
+    content,
+    replyTo = null,
+    image = null
+) {
+    const response = await fetch(
+        '/api/post/comment',
+        buildCommentRequest(postId, content, replyTo, image)
+    );
 
-  return requestComments(`/api/posts/${postId}/comments?${params}`)
+    const data = await response.json();
+
+    if (!response.ok || !data.status) {
+        throw new Error(
+            data.message || 'Failed to add comment'
+        );
+    }
+
+    return data.comment;
 }
 
-// add a comment. if there is an image we have to send FormData,
-// if its just text we send normal json
-export async function createComment(postId, comment) {
-  if (comment.image) {
-    const formData = new FormData()
-    formData.append('content', comment.content)
-    formData.append('image', comment.image)
+export async function deleteComment(commentId) {
+    const response = await fetch(
+        `/api/post/comment?commentId=${commentId}`,
+        {
+            method: 'DELETE',
+            credentials: 'include'
+        }
+    );
 
-    return requestComments(`/api/posts/${postId}/comments`, {
-      method: 'POST',
-      body: formData,
-    })
-  }
+    const data = await response.json();
 
-  return requestComments(`/api/posts/${postId}/comments`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ content: comment.content }),
-  })
+    if (!response.ok || !data.status) {
+        throw new Error(
+            data.message || 'Failed to delete comment'
+        );
+    }
+
+    return data;
 }
 
-// delete my comment
-export async function deleteComment(postId, commentId) {
-  return requestComments(`/api/posts/${postId}/comments/${commentId}`, {
-    method: 'DELETE',
-  })
+export async function voteComment(commentId, vote) {
+    const response = await fetch(
+        `/api/post/comment/vote?commentId=${commentId}&vote=${vote}`,
+        {
+            method: 'POST',
+            credentials: 'include'
+        }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok || !data.status) {
+        throw new Error(
+            data.message || 'Failed to vote on comment'
+        );
+    }
+
+    return data;
 }

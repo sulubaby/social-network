@@ -1,68 +1,108 @@
-import { checkSessionResponse } from '@/helpers/auth/auth'
-import { router } from '@/router/router'
+export async function addPost(post = {}, image = null) {
+    const formData = new FormData();
 
-// create a post. formData has content, privacy, location, selected followers and the image
-export async function createPost(formData) {
-    const response = await fetch('/api/posts', {
+    formData.append('content', post.content || '');
+    formData.append('allowComments', String(post.allowComments));
+    formData.append('privatePost', String(post.privatePost));
+    formData.append('groupID', String(post.groupID));
+    formData.append('location', post.location || '');
+    formData.append(
+        'taggedPeople',
+        JSON.stringify(post.taggedPeople || [])
+    );
+
+    if (image) {
+        formData.append('image', image);
+    }
+
+    const resp = await fetch('/api/post', {
         method: 'POST',
         credentials: 'include',
-        body: formData,
-    })
+        body: formData
+    });
 
-    if (!checkSessionResponse(response)) {
-        router.replace('/login')
-        return
+    if (!resp.ok) {
+        throw new Error('could not send post');
     }
 
-    const result = await response.json()
-
-    if (!response.ok) {
-        throw new Error(result.message || 'Failed to create post')
-    }
-
-    return result
+    return await resp.json();
 }
 
-// get one page of the home feed
-export async function getPosts({ limit = 20, offset = 0, userId = null } = {}) {
-    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
-    // with a userId we get that persons posts for their profile page
-    if (userId) params.set('userID', String(userId))
-    const response = await fetch(`/api/posts?${params}`, {
+export async function getUserPosts(userID = "", offset = 0, limit = 9, type = "") {
+    const params = new URLSearchParams({
+        offset: String(offset),
+        limit: String(limit),
+        targetID: String(userID)
+    });
+
+    if (type) {
+        params.set('type', type);
+    }
+
+    const resp = await fetch(`/api/user/posts?${params.toString()}`, {
+        method: "GET",
+        credentials: 'include',
+    });
+
+    const result = await resp.json()
+    if (!resp.ok) {
+        throw new Error('Error: ' + (result.message || 'could not get data'))
+    }
+
+    return result;
+}
+
+export async function getHomeVideos(offset = 0, limit = 5) {
+    const params = new URLSearchParams({
+        type: 'videos',
+        offset: String(offset),
+        limit: String(limit)
+    });
+
+    const resp = await fetch(`/api/posts?${params.toString()}`, {
         method: 'GET',
-        credentials: 'include',
-    })
+        credentials: 'include'
+    });
 
-    if (!checkSessionResponse(response)) {
-        router.replace('/login')
-        return
+    const result = await resp.json();
+
+    if (!resp.ok) {
+        throw new Error(result.message || 'could not get videos');
     }
 
-    const result = await response.json()
-
-    if (!response.ok) {
-        throw new Error(result.message || 'Could not load posts')
-    }
-
-    return result
+    return result;
 }
 
-// like = PUT, unlike = DELETE on the same url
-export async function setPostLike(postId, liked) {
-    const response = await fetch(`/api/posts/${postId}/like`, {
-        method: liked ? 'PUT' : 'DELETE',
+export async function deletePost(postID) {
+    const resp = await fetch(`/api/post?postId=${postID}`, {
+        method: 'DELETE',
+        credentials: 'include'
+    });
+
+    const result = await resp.json();
+
+    if (!resp.ok) {
+        throw new Error(result.message || 'could not delete post');
+    }
+
+    return result;
+}
+
+export async function viewPost(postID) {
+    const resp = await fetch('/api/posts/seen', {
+        method: 'POST',
         credentials: 'include',
-    })
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(postID)
+    });
 
-    if (!checkSessionResponse(response)) {
-        router.replace('/login')
-        return
+    const result = await resp.json();
+
+    if (!resp.ok) {
+        throw new Error(result.message || 'Could not mark post as seen');
     }
-
-    const result = await response.json()
-    if (!response.ok) {
-        throw new Error(result.message || 'Could not update the like')
-    }
-
-    return result
+    
+    return result;
 }

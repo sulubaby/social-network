@@ -1,69 +1,65 @@
 <script setup>
-import { onBeforeUnmount, reactive, ref } from 'vue'
+import { onBeforeUnmount, pushScopeId, reactive, ref } from 'vue'
 
 import {
-  loggingSession,
-  registerUser,
-  checkRegistration,
-  sendEmailCode,
-  verifyEmailCode,
+    loggingSession,
+    registerUser,
+    checkRegistration,
+    sendEmailCode,
+    verifyEmailCode,
 } from '@/api/auth/auth.js'
 
 import {
-  validateName,
-  validateUsername,
-  validateEmail,
-  validateDOB,
-  validatePassword,
-  validateAbout,
-  handleEmailInput,
-  handleUsernameInput,
-  handleNameInput,
-  validateAvatar,
+    validateName,
+    validateUsername,
+    validateEmail,
+    validateDOB,
+    validatePassword,
+    validateAbout,
+    handleEmailInput,
+    handleUsernameInput,
+    handleNameInput,
+    validateAvatar,
 } from '@/helpers/validators/registration.js'
 
 import InputHolder from './InputHolder.vue'
-
 import { router } from '@/router/router.js'
 import { addNotification } from '@/data/notifications.js'
-import IconGlyph from '@/components/layout/IconGlyph.vue'
 
-const signingUp = ref(false)
-
-const avatarInput = ref(null)
-const avatarName = ref('')
+const toggleInput = ref(null)
+const signupForm = ref(null)
 
 const loginErrors = reactive({
-  identifier: '',
-  password: '',
-  form: '',
+    identifier: '',
+    password: '',
+    form: '',
 })
 
 const errors = reactive({
-  firstName: '',
-  lastName: '',
-  username: '',
-  dob: '',
-  email: '',
-  about: '',
-  password: '',
-  avatar: '',
+    firstName: '',
+    lastName: '',
+    username: '',
+    dob: '',
+    email: '',
+    about: '',
+    password: '',
+    avatar: '',
 })
 
 const touched = reactive({
-  firstName: false,
-  lastName: false,
-  username: false,
-  dob: false,
-  email: false,
-  about: false,
-  password: false,
-  avatar: false,
+    firstName: false,
+    lastName: false,
+    username: false,
+    dob: false,
+    email: false,
+    about: false,
+    password: false,
+    avatar: false,
 })
 
 const availability = reactive({
-  username: null,
-  email: null,
+    username: null,
+    email: null,
 })
 
 const CODE_LENGTH = 6
@@ -85,1095 +81,1063 @@ let verifyToken = ''
 let resendTimer = null
 
 function stopResendTimer() {
-  if (resendTimer) {
-    clearInterval(resendTimer)
-    resendTimer = null
-  }
+    if (resendTimer) {
+        clearInterval(resendTimer)
+        resendTimer = null
+    }
 }
 
 function startResendTimer(seconds) {
-  stopResendTimer()
+    stopResendTimer()
 
-  resendIn.value = seconds
+    resendIn.value = seconds
 
-  if (seconds <= 0) return
+    if (seconds <= 0) return
 
-  resendTimer = setInterval(() => {
-    resendIn.value -= 1
+    resendTimer = setInterval(() => {
+        resendIn.value -= 1
 
-    if (resendIn.value <= 0) {
-      resendIn.value = 0
-      stopResendTimer()
-    }
-  }, 1000)
+        if (resendIn.value <= 0) {
+            resendIn.value = 0
+            stopResendTimer()
+        }
+    }, 1000)
 }
 
 onBeforeUnmount(stopResendTimer)
 
 function resetVerification() {
-  stopResendTimer()
+    stopResendTimer()
 
-  step.value = 'form'
-  pendingEmail.value = ''
-  code.value = ''
-  codeError.value = ''
-  attemptsLeft.value = MAX_ATTEMPTS
-  resendIn.value = 0
+    step.value = 'form'
+    pendingEmail.value = ''
+    code.value = ''
+    codeError.value = ''
+    attemptsLeft.value = MAX_ATTEMPTS
+    resendIn.value = 0
 
-  pendingForm = null
-  verifiedEmail = ''
-  verifyToken = ''
+    pendingForm = null
+    verifiedEmail = ''
+    verifyToken = ''
+}
+
+function resetSignupForm() {
+    signupForm.value?.reset()
+
+    Object.keys(errors).forEach(key => {
+        errors[key] = ''
+        touched[key] = false
+    })
+
+    availability.username = null
+    availability.email = null
 }
 
 function validateField(field, value) {
-  touched[field] = true
+    touched[field] = true
 
-  const validators = {
-    avatar: validateAvatar,
-    firstName: validateName,
-    lastName: validateName,
-    username: validateUsername,
-    email: validateEmail,
-    dob: validateDOB,
-    password: validatePassword,
-    about: validateAbout,
-  }
+    const validators = {
+        avatar: validateAvatar,
+        firstName: validateName,
+        lastName: validateName,
+        username: validateUsername,
+        email: validateEmail,
+        dob: validateDOB,
+        password: validatePassword,
+        about: validateAbout,
+    }
 
-  errors[field] = validators[field](value)
+    errors[field] = validators[field](value)
 
-  if (field === 'username' && errors.username) {
-    availability.username = null
-  }
+    if (field === 'username' && errors.username) {
+        availability.username = null
+    }
 
-  if (field === 'email' && errors.email) {
-    availability.email = null
-  }
-}
-
-function handleName(field, event) {
-  const value = handleNameInput(event.target.value)
-
-  event.target.value = value
-  validateField(field, value)
-}
-
-function handleUsername(event) {
-  const value = handleUsernameInput(event.target.value)
-
-  event.target.value = value
-  validateField('username', value)
-
-  if (!value) {
-    availability.username = null
-  }
-}
-
-function handleEmail(event) {
-  const value = handleEmailInput(event.target.value)
-
-  event.target.value = value
-  validateField('email', value)
-
-  if (!value) {
-    availability.email = null
-  }
-}
-
-async function checkAvailability(field, value) {
-  if (!value || errors[field]) {
-    availability[field] = null
-    return
-  }
-
-  try {
-    const type = field === 'username' ? 'name' : 'email'
-
-    const result = await checkRegistration(type, value)
-
-    availability[field] = result.avilable
-  } catch {
-    availability[field] = null
-  }
-}
-
-async function checkUsernameAvailability(event) {
-  const value = event.target.value.trim()
-
-  validateField('username', value)
-
-  if (errors.username) {
-    availability.username = null
-    return
-  }
-
-  await checkAvailability('username', value)
-}
-
-async function checkEmailAvailability(event) {
-  const value = event.target.value.trim()
-
-  validateField('email', value)
-
-  if (errors.email) {
-    availability.email = null
-    return
-  }
-
-  await checkAvailability('email', value)
-}
-
-function inputClass(field) {
-  if (!touched[field]) return ''
-
-  if (errors[field]) return 'input-error'
-
-  if (availability[field] === false) return 'input-error'
-
-  if (availability[field] === true) return 'input-valid'
-
-  return ''
-}
-
-function updateAvatar(file) {
-  avatarName.value = file?.name || ''
-  validateField('avatar', file)
+    if (field === 'email' && errors.email) {
+        availability.email = null
+    }
 }
 
 function handleAvatar(event) {
-  updateAvatar(event.target.files?.[0] || null)
+    validateField('avatar', event.target.files?.[0] || null)
 }
 
-function handleAvatarDrop(event) {
-  const files = event.dataTransfer?.files
+function handleName(field, event) {
+    const value = handleNameInput(event.target.value)
 
-  if (!files?.length) return
+    event.target.value = value
+    validateField(field, value)
+}
 
-  try {
-    avatarInput.value.files = files
-  } catch {
-    // Browsers can block assigning a dropped FileList.
-  }
+function handleUsername(event) {
+    const value = handleUsernameInput(event.target.value)
 
-  updateAvatar(files[0])
+    event.target.value = value
+    validateField('username', value)
+
+    if (!value) {
+        availability.username = null
+    }
+}
+
+function handleEmail(event) {
+    const value = handleEmailInput(event.target.value)
+
+    event.target.value = value
+    validateField('email', value)
+
+    if (!value) {
+        availability.email = null
+    }
+}
+
+async function checkAvailability(field, value) {
+    if (!value || errors[field]) {
+        availability[field] = null
+        return
+    }
+
+    try {
+        const type = field === 'username' ? 'name' : 'email'
+
+        const result = await checkRegistration(type, value)
+
+        availability[field] = result.avilable
+    } catch {
+        availability[field] = null
+    }
+}
+
+async function checkUsernameAvailability(event) {
+    const value = event.target.value.trim()
+
+    validateField('username', value)
+
+    if (errors.username) {
+        availability.username = null
+        return
+    }
+
+    await checkAvailability('username', value)
+}
+
+async function checkEmailAvailability(event) {
+    const value = event.target.value.trim()
+
+    validateField('email', value)
+
+    if (errors.email) {
+        availability.email = null
+        return
+    }
+
+    await checkAvailability('email', value)
+}
+
+function inputClass(field) {
+    if (!touched[field]) return ''
+
+    if (errors[field]) return 'input-error'
+
+    if (availability[field] === false) return 'input-error'
+
+    return 'input-valid'
 }
 
 function validateForm(form) {
-  const data = new FormData(form)
+    const data = new FormData(form)
 
-  validateField('firstName', data.get('FirstName') || '')
-  validateField('lastName', data.get('LastName') || '')
-  validateField('username', data.get('UserName') || '')
-  validateField('dob', data.get('dob') || '')
-  validateField('email', data.get('Email') || '')
-  validateField('about', data.get('About') || '')
-  validateField('password', data.get('Password') || '')
-  validateField('avatar', data.get('Avatar'))
+    validateField('firstName', data.get('FirstName') || '')
+    validateField('lastName', data.get('LastName') || '')
+    validateField('username', data.get('UserName') || '')
+    validateField('dob', data.get('dob') || '')
+    validateField('email', data.get('Email') || '')
+    validateField('about', data.get('About') || '')
+    validateField('password', data.get('Password') || '')
+    validateField('avatar', data.get('Avatar'))
 
-  return (
-    Object.values(errors).every(error => !error) &&
-    availability.email !== false &&
-    (
-      !data.get('UserName') ||
-      availability.username !== false
+    return (
+        Object.values(errors).every(error => !error) &&
+        availability.email !== false &&
+        (
+            !data.get('UserName') ||
+            availability.username !== false
+        )
     )
-  )
 }
 
 async function requestCode(email) {
-  sendingCode.value = true
-  codeError.value = ''
+    sendingCode.value = true
+    codeError.value = ''
 
-  try {
-    const result = await sendEmailCode(email)
+    try {
+        const result = await sendEmailCode(email)
 
-    code.value = ''
-    attemptsLeft.value = result.attempts ?? MAX_ATTEMPTS
-    startResendTimer(result.cooldown ?? 60)
-    step.value = 'code'
-  } catch (error) {
-    if (error.status === 409) {
-      touched.email = true
-      availability.email = false
-      step.value = 'form'
-      addNotification(error.message, 'error')
-      return
+        code.value = ''
+        attemptsLeft.value = result.attempts ?? MAX_ATTEMPTS
+        startResendTimer(result.cooldown ?? 60)
+        step.value = 'code'
+    } catch (error) {
+        if (error.status === 409) {
+            touched.email = true
+            availability.email = false
+            step.value = 'form'
+            addNotification(error.message, 'error')
+            return
+        }
+
+        if (error.status === 429) {
+            startResendTimer(error.retryAfter ?? 60)
+            step.value = 'code'
+            codeError.value = error.message
+            return
+        }
+
+        addNotification(`Could not send code: ${error.message}`, 'error')
+    } finally {
+        sendingCode.value = false
     }
-
-    if (error.status === 429) {
-      startResendTimer(error.retryAfter ?? 60)
-      step.value = 'code'
-      codeError.value = error.message
-      return
-    }
-
-    addNotification(`Could not send code: ${error.message}`, 'error')
-  } finally {
-    sendingCode.value = false
-  }
 }
 
 async function finishRegistration() {
-  if (!pendingForm) return
+    if (!pendingForm) return
 
-  registering.value = true
-  pendingForm.set('VerifyToken', verifyToken)
-
-  try {
-    const result = await registerUser(pendingForm)
-
-    if (!result.status) {
-      addNotification(`Failed to register: ${result.message}`, 'error')
-      step.value = 'form'
-      return
-    }
-
-    addNotification('Account created successfully.', 'success')
-
-    // sign the new account in right away with what was just typed
-    const email = String(pendingForm.get('Email') || '').trim().toLowerCase()
-    const password = String(pendingForm.get('Password') || '')
-    const remember = pendingForm.get('Remember') !== null
-
-    resetVerification()
-    signingUp.value = false
+    registering.value = true
+    pendingForm.set('VerifyToken', verifyToken)
 
     try {
-      const login = await loggingSession({ Identifier: email, Pass: password, Remember: remember })
-      if (login?.status) router.replace('/home')
-    } catch {
-      // the account exists, the person can still sign in with the form
-    }
-  } catch (error) {
-    if (error.status === 403) {
-      verifiedEmail = ''
-      verifyToken = ''
-      code.value = ''
-      attemptsLeft.value = 0
-      codeError.value = 'Your email verification expired. Request a new code.'
-      step.value = 'code'
-    } else {
-      step.value = 'form'
-    }
+        const result = await registerUser(pendingForm)
 
-    addNotification(`Failed to register: ${error.message}`, 'error')
-  } finally {
-    registering.value = false
-  }
+        if (!result.status) {
+            addNotification(`Failed to register: ${result.message}`, 'error')
+            step.value = 'form'
+            return
+        }
+
+        addNotification('Account created successfully.', 'success');
+        
+        router.push("/home");
+        window.location.reload();
+        return;
+
+    } catch (error) {
+        if (error.status === 403) {
+            verifiedEmail = ''
+            verifyToken = ''
+            code.value = ''
+            attemptsLeft.value = 0
+            codeError.value = 'Your email verification expired. Request a new code.'
+            step.value = 'code'
+        } else {
+            step.value = 'form'
+        }
+
+        addNotification(`Failed to register: ${error.message}`, 'error')
+    } finally {
+        registering.value = false
+    }
 }
 
 async function sendData(event) {
-  event.preventDefault()
+    event.preventDefault()
 
-  if (sendingCode.value || registering.value) return
+    if (sendingCode.value || registering.value) return
 
-  const form = event.target
+    const form = event.target
 
-  if (!validateForm(form)) return
+    if (!validateForm(form)) return
 
-  pendingForm = new FormData(form)
+    pendingForm = new FormData(form)
 
-  const email = String(pendingForm.get('Email') || '').trim().toLowerCase()
+    const email = String(pendingForm.get('Email') || '').trim().toLowerCase()
 
-  pendingEmail.value = email
+    pendingEmail.value = email
 
-  if (verifyToken && verifiedEmail === email) {
-    await finishRegistration()
-    return
-  }
+    if (verifyToken && verifiedEmail === email) {
+        await finishRegistration()
+        return
+    }
 
-  await requestCode(email)
+    await requestCode(email)
 }
 
 function handleCode(event) {
-  const value = event.target.value.replace(/\D/g, '').slice(0, CODE_LENGTH)
+    const value = event.target.value.replace(/\D/g, '').slice(0, CODE_LENGTH)
 
-  event.target.value = value
-  code.value = value
-  codeError.value = ''
+    event.target.value = value
+    code.value = value
+    codeError.value = ''
 }
 
 async function verifyCode() {
-  if (verifying.value || registering.value || attemptsLeft.value <= 0) return
+    if (verifying.value || registering.value || attemptsLeft.value <= 0) return
 
-  if (code.value.length !== CODE_LENGTH) {
-    codeError.value = `Enter the ${CODE_LENGTH}-digit code`
-    return
-  }
-
-  verifying.value = true
-  codeError.value = ''
-
-  try {
-    const result = await verifyEmailCode(pendingEmail.value, code.value)
-
-    verifiedEmail = pendingEmail.value
-    verifyToken = result.token
-
-    await finishRegistration()
-  } catch (error) {
-    if (typeof error.attemptsLeft === 'number') {
-      attemptsLeft.value = error.attemptsLeft
+    if (code.value.length !== CODE_LENGTH) {
+        codeError.value = `Enter the ${CODE_LENGTH}-digit code`
+        return
     }
 
-    code.value = ''
-    codeError.value = error.message
-  } finally {
-    verifying.value = false
-  }
+    verifying.value = true
+    codeError.value = ''
+
+    try {
+        const result = await verifyEmailCode(pendingEmail.value, code.value)
+
+        verifiedEmail = pendingEmail.value
+        verifyToken = result.token
+
+        await finishRegistration()
+    } catch (error) {
+        if (typeof error.attemptsLeft === 'number') {
+            attemptsLeft.value = error.attemptsLeft
+        }
+
+        code.value = ''
+        codeError.value = error.message
+    } finally {
+        verifying.value = false
+    }
 }
 
 async function resendCode() {
-  if (sendingCode.value || resendIn.value > 0) return
+    if (sendingCode.value || resendIn.value > 0) return
 
-  await requestCode(pendingEmail.value)
+    await requestCode(pendingEmail.value)
 }
 
 function backToForm() {
-  step.value = 'form'
-  code.value = ''
-  codeError.value = ''
+    step.value = 'form'
+    code.value = ''
+    codeError.value = ''
 }
 
 async function loggUser(event) {
-  event.preventDefault()
+    event.preventDefault()
 
-  loginErrors.identifier = ''
-  loginErrors.password = ''
-  loginErrors.form = ''
+    loginErrors.identifier = ''
+    loginErrors.password = ''
+    loginErrors.form = ''
 
-  const formData = new FormData(event.target)
+    const formData = new FormData(event.target)
 
-  const identifier = String(formData.get('Identifier') || '').trim()
-  const password = formData.get('Pass')
-  const remember = formData.get('Remember') !== null
+    const identifier = formData.get('Identifier')
+    const password = formData.get('Pass')
 
-  if (!identifier) {
-    loginErrors.identifier = 'Email or username is required'
-  }
+    if (!identifier) {
+        loginErrors.identifier = 'Email or username is required'
+    }
 
-  if (!password) {
-    loginErrors.password = 'Password is required'
-  }
+    if (!password) {
+        loginErrors.password = 'Password is required'
+    }
 
-  if (loginErrors.identifier || loginErrors.password) return
+    if (loginErrors.identifier || loginErrors.password) return
 
-  try {
-    const result = await loggingSession({
-      Identifier: identifier,
-      Pass: password,
-      Remember: remember,
-    })
+    try {
+        const result = await loggingSession({
+            Identifier: identifier,
+            Pass: password,
+        })
 
-    if (result.status) router.replace('/home')
-  } catch (error) {
-    loginErrors.form =
-      error.message || 'Invalid email, username, or password'
-  }
+        if (result.status) router.replace('/home')
+    } catch (error) {
+        loginErrors.form =
+            error.message || 'Invalid email, username, or password'
+    }
 }
 </script>
 
 <template>
-  <section class="auth-section" aria-label="Account access">
-    <div class="auth-card">
-      <nav class="auth-tabs" aria-label="Account access">
-        <button
-          class="auth-tab"
-          :class="{ 'auth-tab--active': !signingUp }"
-          type="button"
-          @click="signingUp = false"
-        >
-          Sign in
-        </button>
+    <section class="auth-section">
+        <div class="wrapper">
+            <div class="card-switch">
+                <label class="switch">
+                    <input ref="toggleInput" type="checkbox" class="toggle">
 
-        <button
-          class="auth-tab"
-          :class="{ 'auth-tab--active': signingUp }"
-          type="button"
-          @click="signingUp = true"
-        >
-          Create account
-        </button>
-      </nav>
+                    <span class="slider"></span>
 
-      <div v-if="!signingUp" class="auth-panel">
-        <form class="auth-form" @submit.prevent="loggUser">
-          <div class="input-group">
-            <label for="login-email">EMAIL OR USERNAME *</label>
+                    <span class="card-side"></span>
 
-            <InputHolder
-              id="login-email"
-              type="text"
-              name="Identifier"
-              :min-length="3"
-              :max-length="75"
-              place-holder="noa@orbit.app"
-              required
-              autocomplete="username"
-            />
+                    <div class="flip-card__inner">
+                        <div class="flip-card__front">
+                            <div class="title">
+                                Log in
+                            </div>
 
-            <span
-              v-if="loginErrors.identifier"
-              class="input-error-message"
-            >
-              {{ loginErrors.identifier }}
-            </span>
-          </div>
+                            <p class="form-subtitle">
+                                Welcome back.
+                            </p>
 
-          <div class="input-group">
-            <label for="login-password">PASSWORD *</label>
+                            <form @submit.prevent="loggUser" class="flip-card__form">
+                                <div class="input-group">
+                                    <label for="login-email">
+                                        Email or username
+                                    </label>
 
-            <InputHolder
-              id="login-password"
-              type="password"
-              name="Pass"
-              :min-length="8"
-              :max-length="100"
-              place-holder="••••••••••"
-              required
-              autocomplete="current-password"
-            />
+                                    <InputHolder id="login-email" type="text" name="Identifier" :minLength="3"
+                                        :maxLength="75" placeHolder="email@example.com" autocomplete="username"
+                                        required />
 
-            <span
-              v-if="loginErrors.password"
-              class="input-error-message"
-            >
-              {{ loginErrors.password }}
-            </span>
-          </div>
+                                    <span v-if="loginErrors.identifier" class="input-error-message">
+                                        {{ loginErrors.identifier }}
+                                    </span>
+                                </div>
 
-          <span
-            v-if="loginErrors.form"
-            class="input-error-message"
-            role="alert"
-          >
-            {{ loginErrors.form }}
-          </span>
+                                <div class="input-group">
+                                    <label for="login-password">
+                                        Password
+                                    </label>
 
-          <label class="remember-row">
-            <input type="checkbox" name="Remember" checked />
-            <span>
-              Keep me signed in on this device
-              <small>session cookie</small>
-            </span>
-          </label>
+                                    <InputHolder id="login-password" type="password" name="Pass" :minLength="8"
+                                        :maxLength="100" placeHolder="Password" autocomplete="current-password"
+                                        required />
 
-          <button class="auth-submit" type="submit">
-            Let's go
-            <IconGlyph name="arrowRight" :size="16" />
-          </button>
-        </form>
+                                    <span v-if="loginErrors.password" class="input-error-message">
+                                        {{ loginErrors.password }}
+                                    </span>
+                                </div>
 
-        <p class="auth-footer">
-          Don't have an account?
-          <button type="button" @click="signingUp = true">
-            Create account
-          </button>
-        </p>
-      </div>
+                                <span v-if="loginErrors.form" class="input-error-message login-error" role="alert">
+                                    {{ loginErrors.form }}
+                                </span>
 
-      <div v-else class="auth-panel">
-        <form
-          v-show="step === 'form'"
-          class="auth-form"
-          @submit.prevent="sendData"
-        >
-          <div class="input-group">
-            <label for="signup-email">EMAIL *</label>
+                                <button class="flip-card__btn" type="submit">
+                                    Let's go!
+                                </button>
+                            </form>
 
-            <InputHolder
-              id="signup-email"
-              type="email"
-              name="Email"
-              :min-length="5"
-              :max-length="75"
-              place-holder="noa@orbit.app"
-              :class="inputClass('email')"
-              autocomplete="email"
-              required
-              @input="handleEmail"
-              @blur="checkEmailAvailability"
-            />
+                            <p class="form-footer">
+                                Don't have an account?
+                                <span>Sign up</span>
+                            </p>
+                        </div>
 
-            <span
-              v-if="touched.email && errors.email"
-              class="input-error-message"
-            >
-              {{ errors.email }}
-            </span>
+                        <div class="flip-card__back">
+                            <div class="title">
+                                Sign up
+                            </div>
 
-            <span
-              v-else-if="availability.email === false"
-              class="input-error-message"
-            >
-              Email is already in use
-            </span>
-          </div>
+                            <p class="form-subtitle">
+                                Create your account.
+                            </p>
 
-          <div class="input-group">
-            <label for="signup-password">PASSWORD *</label>
+                            <form ref="signupForm" class="flip-card__form" @submit.prevent="sendData">
+                                <div class="input-row">
+                                    <div class="input-group">
+                                        <label for="first-name">
+                                            First name
+                                        </label>
 
-            <InputHolder
-              id="signup-password"
-              type="password"
-              name="Password"
-              :min-length="8"
-              :max-length="75"
-              place-holder="••••••••••"
-              :class="inputClass('password')"
-              autocomplete="new-password"
-              required
-              @input="validateField('password', $event.target.value)"
-            />
+                                        <InputHolder id="first-name" type="text" name="FirstName" :minLength="2"
+                                            :maxLength="15" placeHolder="First name" :class="inputClass('firstName')"
+                                            autocomplete="given-name" @input="handleName('firstName', $event)"
+                                            required />
 
-            <span
-              v-if="touched.password && errors.password"
-              class="input-error-message"
-            >
-              {{ errors.password }}
-            </span>
-          </div>
+                                        <span v-if="touched.firstName && errors.firstName" class="input-error-message">
+                                            {{ errors.firstName }}
+                                        </span>
+                                    </div>
 
-          <div class="input-row">
-            <div class="input-group">
-              <label for="first-name">FIRST NAME *</label>
+                                    <div class="input-group">
+                                        <label for="last-name">
+                                            Last name
+                                        </label>
 
-              <InputHolder
-                id="first-name"
-                type="text"
-                name="FirstName"
-                :min-length="2"
-                :max-length="15"
-                place-holder="Noa"
-                :class="inputClass('firstName')"
-                autocomplete="given-name"
-                required
-                @input="handleName('firstName', $event)"
-              />
+                                        <InputHolder id="last-name" type="text" name="LastName" :minLength="2"
+                                            :maxLength="15" placeHolder="Last name" :class="inputClass('lastName')"
+                                            autocomplete="family-name" @input="handleName('lastName', $event)"
+                                            required />
 
-              <span
-                v-if="touched.firstName && errors.firstName"
-                class="input-error-message"
-              >
-                {{ errors.firstName }}
-              </span>
+                                        <span v-if="touched.lastName && errors.lastName" class="input-error-message">
+                                            {{ errors.lastName }}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div class="input-row">
+                                    <div class="input-group">
+                                        <label for="username">
+                                            Username
+                                        </label>
+
+                                        <InputHolder id="username" type="text" name="UserName" :minLength="3"
+                                            :maxLength="12" placeHolder="Username" :class="inputClass('username')"
+                                            autocomplete="nickname" @input="handleUsername"
+                                            @blur="checkUsernameAvailability" />
+
+                                        <span v-if="touched.username && errors.username" class="input-error-message">
+                                            {{ errors.username }}
+                                        </span>
+
+                                        <span v-else-if="availability.username === false" class="input-error-message">
+                                            Username is already taken
+                                        </span>
+                                    </div>
+
+                                    <div class="input-group">
+                                        <label for="dob">
+                                            Date of birth
+                                        </label>
+
+                                        <InputHolder id="dob" type="date" name="dob" :class="inputClass('dob')"
+                                            @input="validateField('dob', $event.target.value)" required />
+
+                                        <span v-if="touched.dob && errors.dob" class="input-error-message">
+                                            {{ errors.dob }}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div class="input-group">
+                                    <label for="signup-email">
+                                        Email
+                                    </label>
+
+                                    <InputHolder id="signup-email" type="email" name="Email" :minLength="5"
+                                        :maxLength="75" placeHolder="email@example.com" :class="inputClass('email')"
+                                        autocomplete="email" @input="handleEmail" @blur="checkEmailAvailability"
+                                        required />
+
+                                    <span v-if="touched.email && errors.email" class="input-error-message">
+                                        {{ errors.email }}
+                                    </span>
+
+                                    <span v-else-if="availability.email === false" class="input-error-message">
+                                        Email is already in use
+                                    </span>
+                                </div>
+
+                                <div class="input-group">
+                                    <label for="avatar">
+                                        Avatar
+                                    </label>
+
+                                    <InputHolder id="avatar" type="file" name="Avatar"
+                                        accept="image/jpeg,image/png,image/gif" :class="inputClass('avatar')"
+                                        @change="handleAvatar" />
+
+                                    <span v-if="touched.avatar && errors.avatar" class="input-error-message">
+                                        {{ errors.avatar }}
+                                    </span>
+                                </div>
+
+                                <div class="input-group">
+                                    <label for="about">
+                                        About
+                                    </label>
+
+                                    <textarea id="about" name="About" maxlength="1000"
+                                        placeholder="Tell us a little about yourself..." :class="inputClass('about')"
+                                        @input="validateField('about', $event.target.value)"></textarea>
+
+                                    <span v-if="touched.about && errors.about" class="input-error-message">
+                                        {{ errors.about }}
+                                    </span>
+                                </div>
+
+                                <div class="input-group">
+                                    <label for="signup-password">
+                                        Password
+                                    </label>
+
+                                    <InputHolder id="signup-password" type="password" name="Password" :minLength="8"
+                                        :maxLength="75" placeHolder="Password" :class="inputClass('password')"
+                                        autocomplete="new-password"
+                                        @input="validateField('password', $event.target.value)" required />
+
+                                    <span v-if="touched.password && errors.password" class="input-error-message">
+                                        {{ errors.password }}
+                                    </span>
+                                </div>
+
+                                <button class="flip-card__btn" type="submit" :disabled="sendingCode || registering">
+                                    {{ sendingCode ? 'Sending...' : 'Confirm!' }}
+                                </button>
+                            </form>
+
+                            <p class="form-footer">
+                                Already have an account?
+                                <span>Log in</span>
+                            </p>
+                        </div>
+                    </div>
+                </label>
             </div>
+        </div>
 
-            <div class="input-group">
-              <label for="last-name">LAST NAME *</label>
+        <Teleport to="body">
+            <div v-if="step === 'code'" class="confirm-overlay" role="dialog" aria-modal="true"
+                aria-labelledby="confirm-title">
+                <form class="confirm-dialog" @submit.prevent="verifyCode">
+                    <h2 id="confirm-title" class="confirm-title">
+                        Verify your email
+                    </h2>
 
-              <InputHolder
-                id="last-name"
-                type="text"
-                name="LastName"
-                :min-length="2"
-                :max-length="15"
-                place-holder="Ferreira"
-                :class="inputClass('lastName')"
-                autocomplete="family-name"
-                required
-                @input="handleName('lastName', $event)"
-              />
+                    <p class="confirm-text">
+                        We sent a 6-digit code to
+                        <strong>{{ pendingEmail }}</strong>.
+                        It expires in 10 minutes.
+                    </p>
 
-              <span
-                v-if="touched.lastName && errors.lastName"
-                class="input-error-message"
-              >
-                {{ errors.lastName }}
-              </span>
+                    <div class="input-group">
+                        <label for="verify-code">
+                            Verification code
+                        </label>
+
+                        <InputHolder id="verify-code" type="text" name="Code" :maxLength="6" placeHolder="123456"
+                            class="code-input" inputmode="numeric" autocomplete="one-time-code" :value="code"
+                            :disabled="attemptsLeft <= 0 || verifying || registering" @input="handleCode" />
+
+                        <span v-if="codeError" class="input-error-message" role="alert">
+                            {{ codeError }}
+                        </span>
+
+                        <span v-else-if="attemptsLeft > 0" class="confirm-hint">
+                            {{ attemptsLeft }} {{ attemptsLeft === 1 ? 'try' : 'tries' }} left
+                        </span>
+                    </div>
+
+                    <button class="flip-card__btn confirm-btn" type="submit"
+                        :disabled="attemptsLeft <= 0 || verifying || registering || code.length !== CODE_LENGTH">
+                        {{ verifying || registering ? 'Verifying...' : 'Verify' }}
+                    </button>
+
+                    <div class="confirm-actions">
+                        <button class="link-button" type="button" :disabled="sendingCode || resendIn > 0"
+                            @click="resendCode">
+                            {{
+                                sendingCode
+                                    ? 'Sending...'
+                                    : resendIn > 0
+                                        ? `Resend code in ${resendIn}s`
+                                        : 'Resend code'
+                            }}
+                        </button>
+
+                        <button class="link-button" type="button" :disabled="verifying || registering"
+                            @click="backToForm">
+                            Change email
+                        </button>
+                    </div>
+                </form>
             </div>
-          </div>
-
-          <div class="input-row">
-            <div class="input-group">
-              <label for="dob">DATE OF BIRTH *</label>
-
-              <InputHolder
-                id="dob"
-                type="date"
-                name="dob"
-                :class="inputClass('dob')"
-                required
-                @input="validateField('dob', $event.target.value)"
-              />
-
-              <span
-                v-if="touched.dob && errors.dob"
-                class="input-error-message"
-              >
-                {{ errors.dob }}
-              </span>
-            </div>
-
-            <div class="input-group">
-              <label for="username">
-                NICKNAME
-                <span>— OPTIONAL</span>
-              </label>
-
-              <InputHolder
-                id="username"
-                type="text"
-                name="UserName"
-                :min-length="3"
-                :max-length="12"
-                place-holder="@noa.png"
-                :class="inputClass('username')"
-                autocomplete="nickname"
-                @input="handleUsername"
-                @blur="checkUsernameAvailability"
-              />
-
-              <span
-                v-if="touched.username && errors.username"
-                class="input-error-message"
-              >
-                {{ errors.username }}
-              </span>
-
-              <span
-                v-else-if="availability.username === false"
-                class="input-error-message"
-              >
-                Username is already taken
-              </span>
-            </div>
-          </div>
-
-          <div class="input-group">
-            <label for="avatar">
-              AVATAR
-              <span>— OPTIONAL · JPG, PNG, GIF</span>
-            </label>
-
-            <label
-              class="upload-zone"
-              for="avatar"
-              @dragover.prevent
-              @drop.prevent="handleAvatarDrop"
-            >
-              <span class="upload-zone__icon">
-                <IconGlyph name="upload" :size="18" />
-              </span>
-
-              <span>
-                {{ avatarName || 'Drop an image or click to browse' }}
-              </span>
-
-              <input
-                id="avatar"
-                ref="avatarInput"
-                type="file"
-                name="Avatar"
-                accept="image/jpeg,image/png,image/gif"
-                @change="handleAvatar"
-              />
-            </label>
-
-            <span
-              v-if="touched.avatar && errors.avatar"
-              class="input-error-message"
-            >
-              {{ errors.avatar }}
-            </span>
-          </div>
-
-          <div class="input-group">
-            <label for="about">
-              ABOUT ME
-              <span>— OPTIONAL</span>
-            </label>
-
-            <textarea
-              id="about"
-              name="About"
-              maxlength="1000"
-              placeholder="Trail runner, pixel-art hobbyist, espresso before noon…"
-              :class="inputClass('about')"
-              @input="validateField('about', $event.target.value)"
-            ></textarea>
-
-            <span
-              v-if="touched.about && errors.about"
-              class="input-error-message"
-            >
-              {{ errors.about }}
-            </span>
-          </div>
-
-          <label class="remember-row">
-            <input type="checkbox" name="Remember" checked />
-
-            <span>
-              Keep me signed in on this device
-              <small>session cookie</small>
-            </span>
-          </label>
-
-          <button
-            class="auth-submit"
-            type="submit"
-            :disabled="sendingCode || registering"
-          >
-            {{ sendingCode ? 'Sending code…' : 'Create my orbit' }}
-            <IconGlyph name="arrowRight" :size="16" />
-          </button>
-        </form>
-
-        <form
-          v-show="step === 'code'"
-          class="auth-form"
-          @submit.prevent="verifyCode"
-        >
-          <div class="verify-intro">
-            <h2 class="verify-title">Verify your email</h2>
-
-            <p class="verify-text">
-              We sent a 6-digit code to
-              <strong>{{ pendingEmail }}</strong>.
-              It expires in 10 minutes.
-            </p>
-          </div>
-
-          <div class="input-group">
-            <label for="verify-code">VERIFICATION CODE *</label>
-
-            <InputHolder
-              id="verify-code"
-              type="text"
-              name="Code"
-              :max-length="6"
-              place-holder="123456"
-              class="code-input"
-              inputmode="numeric"
-              autocomplete="one-time-code"
-              :value="code"
-              :disabled="attemptsLeft <= 0 || verifying || registering"
-              @input="handleCode"
-            />
-
-            <span
-              v-if="codeError"
-              class="input-error-message"
-              role="alert"
-            >
-              {{ codeError }}
-            </span>
-
-            <span v-else-if="attemptsLeft > 0" class="verify-hint">
-              {{ attemptsLeft }} {{ attemptsLeft === 1 ? 'try' : 'tries' }} left
-            </span>
-          </div>
-
-          <button
-            class="auth-submit"
-            type="submit"
-            :disabled="
-              attemptsLeft <= 0 ||
-              verifying ||
-              registering ||
-              code.length !== 6
-            "
-          >
-            {{
-              verifying || registering
-                ? 'Verifying…'
-                : 'Verify and create account'
-            }}
-            <IconGlyph name="arrowRight" :size="16" />
-          </button>
-
-          <div class="verify-actions">
-            <button
-              class="link-button"
-              type="button"
-              :disabled="sendingCode || resendIn > 0"
-              @click="resendCode"
-            >
-              {{
-                sendingCode
-                  ? 'Sending…'
-                  : resendIn > 0
-                    ? `Resend code in ${resendIn}s`
-                    : 'Resend code'
-              }}
-            </button>
-
-            <button class="link-button" type="button" @click="backToForm">
-              Change email
-            </button>
-          </div>
-        </form>
-
-        <p class="auth-footer">
-          Already orbiting?
-          <button type="button" @click="signingUp = false">
-            Sign in
-          </button>
-        </p>
-      </div>
-    </div>
-  </section>
+        </Teleport>
+    </section>
 </template>
 
 <style scoped>
+.login-error {
+    text-align: center;
+    margin-top: -5px;
+}
+
 .auth-section {
-  width: 100%;
-  max-width: 44rem;
-  margin-inline: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 60px;
+    background: var(--page-background);
 }
 
-.auth-card {
-  padding: 2.25rem 3rem 1rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-medium);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-raised);
+.wrapper {
+    width: 100%;
+    max-width: 520px;
 }
 
-.auth-tabs {
-  display: flex;
-  gap: 1.75rem;
-  margin-bottom: 1.25rem;
-  border-bottom: 1px solid var(--color-border);
+.card-switch {
+    width: 100%;
 }
 
-.auth-tab {
-  min-height: 2.75rem;
-  padding: 0 0 .75rem;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  font-size: .875rem;
-  font-weight: 600;
+.switch {
+    position: relative;
+    width: 100%;
+    min-height: 700px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
 }
 
-.auth-tab:hover,
-.auth-tab--active {
-  color: var(--color-text);
+.toggle {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
 }
 
-.auth-tab--active {
-  border-color: var(--color-coral);
+.card-side {
+    position: absolute;
+    top: 0;
+    width: 60px;
+    height: 22px;
 }
 
-.auth-form,
-.input-group {
-  display: grid;
-  gap: .5rem;
+.card-side::before {
+    position: absolute;
+    content: "Log in";
+    left: -90px;
+    top: 0;
+    width: 100px;
+    color: var(--font-color);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: underline;
 }
 
-.auth-form {
-  gap: 1rem;
+.card-side::after {
+    position: absolute;
+    content: "Sign up";
+    left: 75px;
+    top: 0;
+    width: 100px;
+    color: var(--font-color);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
 }
 
-.input-group {
-  gap: .25rem;
+.toggle:checked~.card-side::before {
+    text-decoration: none;
+}
+
+.toggle:checked~.card-side::after {
+    text-decoration: underline;
+}
+
+.slider {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 50px;
+    height: 22px;
+    transform: translateX(-50%);
+    border: 2px solid var(--main-color);
+    border-radius: 5px;
+    background: var(--bg-color);
+    box-shadow: 4px 4px var(--main-color);
+    cursor: pointer;
+    transition: 0.3s;
+}
+
+.slider::before {
+    position: absolute;
+    content: "";
+    width: 20px;
+    height: 20px;
+    left: -2px;
+    bottom: 2px;
+    border: 2px solid var(--main-color);
+    border-radius: 5px;
+    background: var(--bg-color);
+    box-shadow: 0 3px 0 var(--main-color);
+    transition: 0.3s;
+}
+
+.toggle:checked+.slider {
+    background: var(--input-focus);
+}
+
+.toggle:checked+.slider::before {
+    transform: translateX(30px);
+}
+
+.flip-card__inner {
+    position: relative;
+    width: 480px;
+    height: 650px;
+    margin-top: 45px;
+    perspective: 1000px;
+    transition: transform 0.8s;
+    transform-style: preserve-3d;
+}
+
+.toggle:checked~.flip-card__inner {
+    transform: rotateY(180deg);
+}
+
+.flip-card__front,
+.flip-card__back {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    padding: 35px 40px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background: var(--bg-color);
+    border: 2px solid var(--main-color);
+    border-radius: 8px;
+    box-shadow: 7px 7px var(--main-color);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+}
+
+.flip-card__back {
+    transform: rotateY(180deg);
+    overflow-y: auto;
+}
+
+.title {
+    margin: 0 0 2px;
+    color: var(--main-color);
+    font-family: "Liter", serif;
+    font-size: 32px;
+    font-weight: 900;
+}
+
+.form-subtitle {
+    margin: 0 0 20px;
+    color: var(--font-color-sub);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+}
+
+.flip-card__form {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
 }
 
 .input-row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: .75rem;
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
 }
 
 .input-group {
-  min-width: 0;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
 }
 
-.input-group > label {
-  color: var(--color-text-muted);
-  font-family: var(--font-meta);
-  font-size: .6875rem;
-  letter-spacing: .08em;
+.input-group label {
+    color: var(--font-color, #323232);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    font-weight: 600;
 }
 
-.input-group > label span {
-  color: var(--color-text-faint);
+.input-group :deep(.form-input) {
+    width: 100%;
 }
 
 .input-group textarea {
-  width: 100%;
-  min-height: 4.5rem;
-  padding: .75rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-small);
-  outline: 0;
-  background: var(--color-input);
-  color: var(--color-text);
-  resize: vertical;
+    width: 100%;
+    min-height: 75px;
+    resize: vertical;
+    padding: 10px 12px;
+    border: 2px solid var(--main-color);
+    border-radius: 5px;
+    outline: none;
+    background: var(--bg-color);
+    box-shadow: 4px 4px var(--main-color);
+    color: var(--font-color);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.input-group textarea::placeholder {
+    color: var(--font-color-sub);
+    opacity: 0.7;
 }
 
 .input-group textarea:focus {
-  border-color: var(--color-violet);
-  box-shadow: var(--focus-ring);
+    border-color: var(--input-focus);
+    box-shadow: 4px 4px var(--input-focus);
 }
 
-.upload-zone {
-  display: flex;
-  align-items: center;
-  gap: .75rem;
-  min-height: 3.5rem;
-  padding: .75rem;
-  border: 1px dashed var(--color-violet);
-  border-radius: var(--radius-small);
-  background: rgb(var(--rgb-violet) / 5%);
-  color: var(--color-text-soft);
-  cursor: pointer;
+.input-group :deep(.input-error),
+.input-group textarea.input-error {
+    border-color: #e74c3c !important;
+    box-shadow: 4px 4px #e74c3c !important;
 }
 
-.upload-zone:hover {
-  background: rgb(var(--rgb-violet) / 11%);
-}
-
-.upload-zone__icon {
-  color: var(--color-violet);
-  font-size: 1.25rem;
-  line-height: 1;
-}
-
-.upload-zone input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-}
-
-.remember-row {
-  display: flex;
-  align-items: flex-start;
-  gap: .5rem;
-  color: var(--color-text-muted);
-  font-size: .75rem;
-}
-
-.remember-row input {
-  width: 1rem;
-  height: 1rem;
-  margin: 0;
-  accent-color: var(--color-violet);
-}
-
-.remember-row small {
-  color: var(--color-text-faint);
-  font-family: var(--font-meta);
-  font-size: .6875rem;
-}
-
-.auth-submit {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: .45rem;
-  width: 100%;
-  min-height: 3.25rem;
-  border: 0;
-  border-radius: 999px;
-  background: var(--gradient-action);
-  color: var(--color-text);
-  cursor: pointer;
-  font-weight: 700;
-}
-
-.auth-submit:hover {
-  filter: brightness(1.08);
-}
-
-.auth-submit:disabled {
-  cursor: not-allowed;
-  filter: none;
-  opacity: .55;
-}
-
-.verify-intro {
-  display: grid;
-  gap: .375rem;
-}
-
-.verify-title {
-  margin: 0;
-  color: var(--color-text);
-  font-size: 1.125rem;
-}
-
-.verify-text {
-  margin: 0;
-  color: var(--color-text-muted);
-  font-size: .875rem;
-  line-height: 1.5;
-}
-
-.verify-text strong {
-  color: var(--color-text);
-  overflow-wrap: anywhere;
-}
-
-.verify-hint {
-  color: var(--color-text-faint);
-  font-size: .75rem;
-}
-
-.code-input {
-  font-family: var(--font-meta);
-  font-size: 1.25rem;
-  letter-spacing: .5em;
-  text-align: center;
-}
-
-.verify-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: .75rem;
-}
-
-.link-button {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--color-violet-soft);
-  cursor: pointer;
-  font: inherit;
-  font-size: .8125rem;
-}
-
-.link-button:hover:not(:disabled) {
-  color: var(--color-text);
-}
-
-.link-button:disabled {
-  color: var(--color-text-faint);
-  cursor: not-allowed;
-}
-
-.auth-footer {
-  margin: .5rem 0 0;
-  color: var(--color-text-muted);
-  font-size: .8125rem;
-  text-align: center;
-}
-
-.auth-footer button {
-  border: 0;
-  background: transparent;
-  color: var(--color-violet-soft);
-  cursor: pointer;
-  font: inherit;
-}
-
-.auth-footer button:hover {
-  color: var(--color-text);
+.input-group :deep(.input-valid),
+.input-group textarea.input-valid {
+    border-color: #2ecc71 !important;
+    box-shadow: 4px 4px #2ecc71 !important;
 }
 
 .input-error-message {
-  color: var(--color-coral);
-  font-size: .75rem;
+    color: #e74c3c;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 9px;
+    font-weight: 600;
+    line-height: 1.3;
 }
 
-@media (max-width: 30rem) {
-  .input-row {
-    grid-template-columns: 1fr;
-  }
+.flip-card__btn {
+    align-self: center;
+    width: 140px;
+    height: 45px;
+    margin-top: 8px;
+    border: 2px solid var(--main-color);
+    border-radius: 5px;
+    background: var(--input-focus);
+    box-shadow: 4px 4px var(--main-color);
+    color: white;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: 0.15s;
+}
+
+.flip-card__btn:hover:not(:disabled) {
+    transform: translate(-1px, -1px);
+    box-shadow: 6px 6px var(--main-color);
+}
+
+.flip-card__btn:active:not(:disabled) {
+    transform: translate(4px, 4px);
+    box-shadow: 0 0 var(--main-color);
+}
+
+.flip-card__btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+.form-footer {
+    margin: 18px 0 0;
+    color: var(--font-color-sub);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+}
+
+.form-footer span {
+    color: var(--input-focus);
+    font-weight: 600;
+}
+
+.confirm-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgb(0 0 0 / 55%);
+}
+
+.confirm-dialog {
+    width: 100%;
+    max-width: 400px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 30px 32px;
+    border: 2px solid var(--main-color, #323232);
+    border-radius: 8px;
+    background: var(--bg-color, #fff);
+    box-shadow: 7px 7px var(--main-color, #323232);
+}
+
+.confirm-title {
+    margin: 0;
+    color: var(--main-color, #323232);
+    font-family: "Liter", serif;
+    font-size: 24px;
+    font-weight: 900;
+}
+
+.confirm-text {
+    margin: 0;
+    color: var(--font-color-sub, #666);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+.confirm-text strong {
+    color: var(--font-color, #323232);
+    overflow-wrap: anywhere;
+}
+
+.confirm-hint {
+    color: var(--font-color-sub, #666);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+}
+
+.code-input {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 20px;
+    letter-spacing: 0.5em;
+    text-align: center;
+}
+
+.confirm-btn {
+    width: 100%;
+}
+
+.confirm-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.link-button {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--input-focus, #2d8cf0);
+    cursor: pointer;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    font-weight: 600;
+    text-decoration: underline;
+}
+
+.link-button:disabled {
+    color: var(--font-color-sub, #666);
+    cursor: not-allowed;
+    text-decoration: none;
+}
+
+@media (max-width: 900px) {
+    .auth-section {
+        min-height: 600px;
+        padding: 60px 30px;
+    }
+
+    .flip-card__inner {
+        width: 440px;
+    }
+}
+
+@media (max-width: 550px) {
+    .auth-section {
+        padding: 50px 20px;
+    }
+
+    .flip-card__inner {
+        width: min(400px, 90vw);
+    }
+
+    .flip-card__front,
+    .flip-card__back {
+        padding: 30px 25px;
+    }
+
+    .input-row {
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+
+    .confirm-dialog {
+        padding: 24px 20px;
+    }
 }
 </style>

@@ -19,22 +19,3 @@ export async function getSuggestedLocations(searchValue = "") {
 
     return data;
 }
-
-export function getLocationData(results = []) {
-    if (!Array.isArray(results)) return []
-
-    return results
-        .map((item) => {
-            const address = item.address || {}
-
-            return {
-                city: address.city || address.town || address.village || address.municipality || '',
-                state: address.state || address.region || '',
-                country: address.country || '',
-                lat: item.lat,
-                lon: item.lon,
-                link: String(item.place_id || `${item.lat}-${item.lon}`)
-            }
-        })
-        .filter((location) => (location.city || location.state) && location.country)
-}

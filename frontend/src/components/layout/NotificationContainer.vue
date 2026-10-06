@@ -1,66 +1,182 @@
 <script setup>
-// the small popup messages (toasts) at the top of the screen: errors, saved
-// changes and every live notification (follows, groups, events, messages...)
-import { useRouter } from 'vue-router'
-import { notifications, removeNotification } from '@/data/notifications'
-import IconGlyph from './IconGlyph.vue'
+import {
+    notifications,
+    removeNotification,
+    postDialog,
+    openPostDialog,
+    closePostDialog
+} from '@/data/notifications';
+import NotificationPostDialog from '@/components/notifications/NotificationPostDialog.vue';
+import { markNotificationRead } from '@/api/common/notifications';
+import { setUnreadNotificationCount } from '@/data/notificationCount';
+import { useRouter } from 'vue-router';
 
-const router = useRouter()
+const router = useRouter();
 
-const LABELS = {
-  error: 'Something went wrong',
-  message: 'New message',
-  alert: 'Notification',
+async function markToastRead(notification) {
+    if (!notification.notificationId) {
+        return;
+    }
+
+    try {
+        const result = await markNotificationRead(notification.notificationId);
+
+        if (result.status) {
+            setUnreadNotificationCount(result.count);
+        }
+    } catch (err) {
+        console.error(err);
+    }
 }
 
-function label(notification) {
-  return notification.title || LABELS[notification.type] || 'Orbit update'
-}
+function openToast(notification) {
+    if (notification.postId) {
+        openPostDialog(notification.postId);
+    } else if (notification.route) {
+        router.push(notification.route);
+    } else {
+        return;
+    }
 
-// clicking a popup that points somewhere opens that page
-function open(notification) {
-  if (!notification.to) return
-  removeNotification(notification.id)
-  router.push(notification.to)
+    markToastRead(notification);
+    removeNotification(notification.id);
 }
 </script>
-
+    
 <template>
-  <div class="notification-container" aria-live="polite" aria-atomic="false">
-    <TransitionGroup name="signal">
-      <article v-for="notification in notifications" :key="notification.id" class="notification"
-        :class="[`notification--${notification.type}`, { 'notification--link': notification.to }]"
-        :role="notification.to ? 'link' : 'status'" :tabindex="notification.to ? 0 : -1"
-        @click="open(notification)" @keydown.enter="open(notification)">
-        <span class="notification__marker" aria-hidden="true"></span>
-        <div class="notification__copy">
-          <p class="notification__label">{{ label(notification) }}</p>
-          <p class="notification__message">{{ notification.message }}</p>
+    <div class="notification-container">
+        <div
+            v-for="notification in notifications"
+            :key="notification.id"
+            class="notification"
+            :class="[notification.type, { clickable: notification.postId || notification.route }]"
+            @click="openToast(notification)"
+        >
+            <div
+                v-if="notification.avatar || notification.initial"
+                class="notification-avatar"
+            >
+                <img
+                    v-if="notification.avatar"
+                    :src="notification.avatar"
+                    alt=""
+                >
+
+                <span v-else>{{ notification.initial }}</span>
+            </div>
+
+            <span class="notification-text">{{ notification.message }}</span>
+
+            <img
+                v-if="notification.image"
+                :src="notification.image"
+                alt=""
+                class="notification-image"
+            >
+
+            <button
+                type="button"
+                @click.stop="removeNotification(notification.id)"
+            >
+                ×
+            </button>
         </div>
-        <button type="button" aria-label="Dismiss notification" @click.stop="removeNotification(notification.id)"><IconGlyph name="close" :size="17" /></button>
-      </article>
-    </TransitionGroup>
-  </div>
+    </div>
+
+    <NotificationPostDialog
+        :show="postDialog.show"
+        :post-id="postDialog.postId"
+        @close="closePostDialog"
+    />
 </template>
 
 <style scoped>
-.notification-container { position: fixed; top: 1rem; right: 1rem; left: 1rem; z-index: 100; display: grid; gap: .75rem; pointer-events: none; }
-.notification { position: relative; display: grid; grid-template-columns: .25rem 1fr auto; gap: .75rem; align-items: center; max-width: 28rem; margin-left: auto; padding: .9rem 1rem; overflow: hidden; border: 1px solid var(--color-border); border-radius: var(--radius-small); background: rgb(var(--rgb-surface) / 96%); box-shadow: 0 1rem 2.5rem rgb(0 0 0 / 28%); color: var(--color-text); pointer-events: auto; backdrop-filter: blur(.75rem); }
-.notification::after { position: absolute; inset: 0; z-index: -1; background: linear-gradient(110deg, rgb(var(--rgb-mint) / 10%), transparent 45%); content: ''; }
-.notification__marker { width: .25rem; min-height: 2.5rem; border-radius: 99rem; background: var(--color-mint); }
-.notification--error .notification__marker, .notification--alert .notification__marker { background: var(--color-coral); }
-.notification--alert::after { background: linear-gradient(110deg, rgb(var(--rgb-coral) / 12%), transparent 45%); }
-.notification--link { cursor: pointer; }
-.notification--link:hover { border-color: var(--color-violet); }
-.notification__copy { min-width: 0; }
-.notification__label, .notification__message { margin: 0; overflow-wrap: anywhere; }
-.notification__label { color: var(--color-mint); font-family: var(--font-meta); font-size: .6875rem; letter-spacing: .1em; text-transform: uppercase; }
-.notification--error .notification__label, .notification--alert .notification__label { color: var(--color-coral); }
-.notification__message { margin-top: .2rem; color: var(--color-text-soft); font-size: .9375rem; line-height: 1.35; }
-.notification button { display: grid; width: 2.75rem; height: 2.75rem; place-items: center; border: 0; background: transparent; color: var(--color-text-muted); cursor: pointer; font-size: 1.25rem; }
-.notification button:hover { color: var(--color-text); }
-.signal-enter-active, .signal-leave-active { transition: opacity .2s ease, transform .2s ease; }
-.signal-enter-from, .signal-leave-to { opacity: 0; transform: translateY(-.5rem) translateX(1rem); }
-@media (min-width: 48rem) { .notification-container { right: 1.5rem; left: auto; width: min(28rem, calc(100vw - 3rem)); } }
-@media (prefers-reduced-motion: reduce) { .signal-enter-active, .signal-leave-active { transition: none; } }
+.notification-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 9999;
+
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+
+    width: min(350px, calc(100vw - 40px));
+}
+
+.notification {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 15px;
+
+    padding: 14px 16px;
+
+    border: 2px solid var(--main-color);
+    border-radius: 5px;
+
+    background: var(--bg-color);
+    color: var(--font-color);
+
+    box-shadow: 4px 4px var(--main-color);
+
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+}
+
+.notification.clickable {
+    cursor: pointer;
+}
+
+.notification-avatar {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    overflow: hidden;
+    border: 2px solid var(--main-color);
+    border-radius: 50%;
+    background: var(--input-focus);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.notification-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.notification-image {
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    object-fit: cover;
+    border: 2px solid var(--main-color);
+    border-radius: 4px;
+}
+
+.notification-text {
+    flex: 1;
+    min-width: 0;
+}
+
+.notification.success {
+    border-color: var(--input-focus);
+}
+
+.notification.error {
+    border-color: #d9534f;
+}
+
+.notification button {
+    border: none;
+    background: none;
+    color: inherit;
+    font-size: 18px;
+    cursor: pointer;
+}
 </style>

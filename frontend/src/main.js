@@ -1,11 +1,11 @@
 import { createApp } from 'vue'
-import App from './App.vue'
-import './styles/global.css';
-import './styles/variables.css'
+import App from './App.vue';
 import { router } from './router/router.js';
-import { initTheme } from './helpers/theme.js';
+import { initTheme } from './helpers/common/theme.js';
+import "./styles/global.css"
 
-initTheme()
+// applied before mount so the page never flashes the wrong theme
+initTheme();
 
 createApp(App)
     .use(router)

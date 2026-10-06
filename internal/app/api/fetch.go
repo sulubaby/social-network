@@ -78,23 +78,35 @@ func (app *App) GetFriends(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	
+	targetIDParam := r.URL.Query().Get("targetid")
+	targetID := userID 
+	if targetIDParam != "" && targetIDParam != "null" && targetIDParam != "undefined" {
+		parsedTargetID, err := strconv.Atoi(targetIDParam)
+		if err != nil {
+			helpers.WriteJson(w, http.StatusBadRequest, map[string]any{
+				"status":  false,
+				"message": "invalid targetid",
+			})
+			return
+		}
+		targetID = parsedTargetID
+	}
 
 	searchValue := r.URL.Query().Get("search")
 	queryOffset := r.URL.Query().Get("offset")
 	offset, err := strconv.Atoi(queryOffset)
 
 	if err != nil || offset < 0 {
-		log.Println(queryOffset)
-		log.Println(err, "here1")
-
 		helpers.WriteJson(w, http.StatusBadRequest, map[string]any{
 			"status":  false,
 			"message": "invalid offset",
 		})
 		return
 	}
+
 	if searchValue == "" {
-		friends, err := users.GetFriends(app.DB, userID, offset)
+		friends, err := users.GetFriends(app.DB, targetID, offset)
 		if err != nil {
 			log.Println(err)
 			helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
@@ -111,7 +123,7 @@ func (app *App) GetFriends(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	friends, err := users.SearchFriends(app.DB, userID, searchValue)
+	friends, err := users.SearchFriends(app.DB, targetID, searchValue)
 	if err != nil {
 		log.Println(err)
 		helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
@@ -126,7 +138,6 @@ func (app *App) GetFriends(w http.ResponseWriter, r *http.Request) {
 		"message": "friends fetched",
 		"data":    friends,
 	})
-	return
 }
 
 func (app *App) SearchFollows(w http.ResponseWriter, r *http.Request) {
@@ -143,10 +154,11 @@ func (app *App) SearchFollows(w http.ResponseWriter, r *http.Request) {
 	targetID := userID
 	queryID := r.URL.Query().Get("targetid")
 
-	if queryID != "" && queryID != "null" {
+	if queryID != "" && queryID != "null" && queryID != "undefined" {
 		parsedID, err := strconv.Atoi(queryID)
 
 		if err != nil || parsedID <= 0 {
+			log.Println(err)
 			helpers.WriteJson(w, http.StatusBadRequest, map[string]any{
 				"status":  false,
 				"message": "invalid targetid",
@@ -155,10 +167,6 @@ func (app *App) SearchFollows(w http.ResponseWriter, r *http.Request) {
 		}
 
 		targetID = parsedID
-	}
-
-	if !app.canSeeConnections(w, userID, targetID) {
-		return
 	}
 
 	searchValue := r.URL.Query().Get("search")
@@ -193,10 +201,11 @@ func (app *App) SearchFollowing(w http.ResponseWriter, r *http.Request) {
 	targetID := userID
 	queryID := r.URL.Query().Get("targetid")
 
-	if queryID != "" && queryID != "null" {
+	if queryID != "" && queryID != "null" && queryID != "undefined" {
 		parsedID, err := strconv.Atoi(queryID)
 
 		if err != nil || parsedID <= 0 {
+			log.Println(err)
 			helpers.WriteJson(w, http.StatusBadRequest, map[string]any{
 				"status":  false,
 				"message": "invalid targetid",
@@ -205,10 +214,6 @@ func (app *App) SearchFollowing(w http.ResponseWriter, r *http.Request) {
 		}
 
 		targetID = parsedID
-	}
-
-	if !app.canSeeConnections(w, userID, targetID) {
-		return
 	}
 
 	searchValue := r.URL.Query().Get("search")

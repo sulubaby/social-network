@@ -1,5 +1,5 @@
 {
-  "name": "social-network",
+  "name": "vue-project",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -14,7 +14,6 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.8",
-    "concurrently": "^10.0.5",
     "vite": "^8.1.5",
     "vite-plugin-vue-devtools": "^8.1.5"
   },

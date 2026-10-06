@@ -1,44 +1,74 @@
 import { reactive } from 'vue';
 
-// the popups (toasts) at the top of the screen
 export const notifications = reactive([]);
 
-let nextID = 1
-const timers = new Map()
+export const postDialog = reactive({
+    show: false,
+    postId: null
+});
 
-// type: 'success' | 'error' | 'alert' (coral, notifications) | 'message' (mint, chats)
-// options.title: bold first line, options.to: page to open on click,
-// options.key: a popup with the same key replaces the old one instead of stacking
-// (so ten messages from the same chat show as one popup that keeps updating)
-export function addNotification(message, type = 'success', options = {}) {
-    const displayMessage = message instanceof Error ? message.message : String(message);
-    const duration = options.duration ?? (type === 'error' ? 5000 : 4500)
-
-    if (options.key) {
-        const existing = notifications.find(item => item.key === options.key)
-        if (existing) removeNotification(existing.id)
+export function openPostDialog(postId) {
+    if (!postId) {
+        return;
     }
 
-    const id = nextID++
+    postDialog.postId = Number(postId);
+    postDialog.show = true;
+}
+
+export function closePostDialog() {
+    postDialog.show = false;
+    postDialog.postId = null;
+}
+
+export function postImageUrl(imagePath) {
+    if (!imagePath) {
+        return '';
+    }
+
+    const path = imagePath.toLowerCase();
+
+    if (
+        path.endsWith('.mp4') ||
+        path.endsWith('.webm') ||
+        path.endsWith('.mov') ||
+        path.endsWith('.avi')
+    ) {
+        return '';
+    }
+
+    return `/uploads/${imagePath}`;
+}
+
+export function avatarUrl(avatarPath) {
+    return avatarPath ? `/uploads/${avatarPath}` : '';
+}
+
+let nextNotificationId = 0;
+
+export function addNotification(message, type = 'success', options = {}) {
+    const id = ++nextNotificationId;
+
+    const clickable = !!(options.postId || options.route);
+
     notifications.push({
         id,
-        key: options.key || '',
-        title: options.title || '',
-        to: options.to || '',
-        message: displayMessage,
-        type
+        message,
+        type,
+        avatar: options.avatar || '',
+        initial: options.initial || '',
+        image: options.image || '',
+        postId: options.postId || null,
+        route: options.route || null,
+        notificationId: options.notificationId || null
     });
 
-    // keep at most 4 popups on screen
-    while (notifications.length > 4) removeNotification(notifications[0].id)
-
-    timers.set(id, setTimeout(() => removeNotification(id), duration))
+    setTimeout(() => {
+        removeNotification(id);
+    }, clickable ? 6000 : 3000);
 }
 
 export function removeNotification(id) {
-    clearTimeout(timers.get(id))
-    timers.delete(id)
-
     const index = notifications.findIndex(
         notification => notification.id === id
     );

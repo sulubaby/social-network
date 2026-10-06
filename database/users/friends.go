@@ -2,23 +2,10 @@ package users
 
 import (
 	"database/sql"
+
 	"social/internal/models"
 )
 
-/*
-GetFriends retrieves users who mutually follow each other.
-
-Parameters:
-	db *sql.DB, userID int, offset int
-
-Returns:
-	map[int]models.UserRegistration
-	-> Map containing friend IDs and their basic profile information
-
-	error
-	-> nil if successful
-	-> Error if the database query fails
-*/
 func GetFriends(db *sql.DB, userID, offset int) (map[int]models.UserRegistration, error) {
 	friends := make(map[int]models.UserRegistration)
 
@@ -31,14 +18,12 @@ func GetFriends(db *sql.DB, userID, offset int) (map[int]models.UserRegistration
 			FROM user_followers AS uf1
 			WHERE uf1.follower_id = ?
 			  AND uf1.target_id = u.id
-			  AND uf1.status = 1
 		)
 		AND EXISTS (
 			SELECT 1
 			FROM user_followers AS uf2
 			WHERE uf2.follower_id = u.id
 			  AND uf2.target_id = ?
-			  AND uf2.status = 1
 		)
 		ORDER BY u.id
 		LIMIT 30
@@ -48,7 +33,6 @@ func GetFriends(db *sql.DB, userID, offset int) (map[int]models.UserRegistration
 	if err != nil {
 		return friends, err
 	}
-
 	defer rows.Close()
 
 	for rows.Next() {
@@ -91,21 +75,6 @@ func GetFriends(db *sql.DB, userID, offset int) (map[int]models.UserRegistration
 	return friends, nil
 }
 
-/*
-SearchFriends searches for mutual friends whose first or last name
-matches the provided search text.
-
-Parameters:
-	db *sql.DB, userID int, search string
-
-Returns:
-	map[int]models.UserRegistration
-	-> Map containing matching friend IDs and their basic profile information
-
-	error
-	-> nil if successful
-	-> Error if the database query fails
-*/
 func SearchFriends(db *sql.DB, userID int, search string) (map[int]models.UserRegistration, error) {
 	friends := make(map[int]models.UserRegistration)
 
@@ -120,14 +89,12 @@ func SearchFriends(db *sql.DB, userID int, search string) (map[int]models.UserRe
 			FROM user_followers AS uf1
 			WHERE uf1.follower_id = ?
 			  AND uf1.target_id = u.id
-			  AND uf1.status = 1
 		)
 		AND EXISTS (
 			SELECT 1
 			FROM user_followers AS uf2
 			WHERE uf2.follower_id = u.id
 			  AND uf2.target_id = ?
-			  AND uf2.status = 1
 		)
 		AND (
 			u.first_name LIKE ?
@@ -139,7 +106,6 @@ func SearchFriends(db *sql.DB, userID int, search string) (map[int]models.UserRe
 	if err != nil {
 		return friends, err
 	}
-
 	defer rows.Close()
 
 	for rows.Next() {
@@ -182,20 +148,6 @@ func SearchFriends(db *sql.DB, userID int, search string) (map[int]models.UserRe
 	return friends, nil
 }
 
-/*
-GetFollowers retrieves users who follow the specified user.
-
-Parameters:
-	db *sql.DB, userID int, limit int, offset int
-
-Returns:
-	[]models.UserRegistration
-	-> List containing follower information
-
-	error
-	-> nil if successful
-	-> Error if the database query fails
-*/
 func GetFollowers(db *sql.DB, userID, limit, offset int) ([]models.UserRegistration, error) {
 	var followers []models.UserRegistration
 
@@ -205,7 +157,6 @@ func GetFollowers(db *sql.DB, userID, limit, offset int) ([]models.UserRegistrat
 		JOIN user u ON u.id = uf.follower_id
 		LEFT JOIN profile p ON p.user_id = u.id
 		WHERE uf.target_id = ?
-		  AND uf.status = 1
 		ORDER BY u.id
 		LIMIT ? OFFSET ?
 	`, userID, limit, offset)
@@ -213,7 +164,6 @@ func GetFollowers(db *sql.DB, userID, limit, offset int) ([]models.UserRegistrat
 	if err != nil {
 		return nil, err
 	}
-
 	defer rows.Close()
 
 	for rows.Next() {
@@ -255,20 +205,6 @@ func GetFollowers(db *sql.DB, userID, limit, offset int) ([]models.UserRegistrat
 	return followers, nil
 }
 
-/*
-GetFollowing retrieves users that the specified user follows.
-
-Parameters:
-	db *sql.DB, userID int, limit int, offset int
-
-Returns:
-	[]models.UserRegistration
-	-> List containing following user information
-
-	error
-	-> nil if successful
-	-> Error if the database query fails
-*/
 func GetFollowing(db *sql.DB, userID, limit, offset int) ([]models.UserRegistration, error) {
 	var following []models.UserRegistration
 
@@ -278,7 +214,6 @@ func GetFollowing(db *sql.DB, userID, limit, offset int) ([]models.UserRegistrat
 		JOIN user u ON u.id = uf.target_id
 		LEFT JOIN profile p ON p.user_id = u.id
 		WHERE uf.follower_id = ?
-		  AND uf.status = 1
 		ORDER BY u.id
 		LIMIT ? OFFSET ?
 	`, userID, limit, offset)
@@ -286,7 +221,6 @@ func GetFollowing(db *sql.DB, userID, limit, offset int) ([]models.UserRegistrat
 	if err != nil {
 		return nil, err
 	}
-
 	defer rows.Close()
 
 	for rows.Next() {
@@ -328,35 +262,115 @@ func GetFollowing(db *sql.DB, userID, limit, offset int) ([]models.UserRegistrat
 	return following, nil
 }
 
-/*
-function to check if a user (follower) follows another user (target)
-NOTE: it returns false in case of error or no follower
-
-Parameters:
-	db *sql.DB, followerID, targetID int
-
-Returns:
-	bool
-		-> false in case of no follow or FAIL
-	error
-		-> nil if success
-*/
-func IsFollower(db *sql.DB, followerID, targteID int) (bool, error) {
-	var isFollower int
+func IsFriend(db *sql.DB, userID, targetID int) (bool, error) {
+	var exists int
 
 	err := db.QueryRow(`
 		SELECT 1
-		FROM user_followers
-		WHERE follower_id = ? AND target_id = ?
-	`, followerID, targteID).Scan(&isFollower)
+		FROM user_followers uf1
+		JOIN user_followers uf2
+			ON uf1.follower_id = uf2.target_id
+			AND uf1.target_id = uf2.follower_id
+		WHERE uf1.follower_id = ?
+		  AND uf1.target_id = ?
+		LIMIT 1
+	`, userID, targetID).Scan(&exists)
+
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
 
 	if err != nil {
 		return false, err
 	}
 
-	if isFollower == 1 {
-		return true, nil
+	return true, nil
+}
+
+func IsFollowing(db *sql.DB, userID, targetID int) (bool, error) {
+	var exists int
+
+	err := db.QueryRow(`
+		SELECT 1
+		FROM user_followers
+		WHERE follower_id = ?
+		  AND target_id = ?
+		  AND status = 1
+		LIMIT 1
+	`, userID, targetID).Scan(&exists)
+
+	if err == sql.ErrNoRows {
+		return false, nil
 	}
 
-	return false, nil
+	if err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+func Get_followers_following_chatList(db *sql.DB, userID int, search string) ([]models.UserRegistration, error) {
+	var users []models.UserRegistration
+
+	search = "%" + search + "%"
+
+	rows, err := db.Query(`
+		SELECT u.id, u.first_name, u.last_name, u.username, p.avatar_path
+		FROM user u
+		JOIN profile p ON p.user_id = u.id
+		WHERE (
+			EXISTS (
+				SELECT 1
+				FROM user_followers
+				WHERE follower_id = ? AND target_id = u.id
+			)
+			OR
+			EXISTS (
+				SELECT 1
+				FROM user_followers
+				WHERE target_id = ? AND follower_id = u.id
+			)
+			OR
+			EXISTS (
+				SELECT 1
+				FROM groups_users gu1
+				JOIN groups g ON g.id = gu1.group_id
+				JOIN groups_users gu2 ON gu2.group_id = gu1.group_id
+				WHERE gu1.user_id = ?
+					AND gu2.user_id = u.id
+					AND g.is_private_chat = 1
+			)
+		)
+		AND u.id != ?
+		AND (
+			u.first_name LIKE ?
+			OR u.last_name LIKE ?
+			OR u.username LIKE ?
+		)
+		LIMIT 30
+	`, userID, userID, userID, userID, search, search, search)
+
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var u models.UserRegistration
+
+		if err := rows.Scan(
+			&u.ID,
+			&u.FirstName,
+			&u.LastName,
+			&u.UserName,
+			&u.Avatar,
+		); err != nil {
+			return nil, err
+		}
+
+		users = append(users, u)
+	}
+
+	return users, rows.Err()
 }

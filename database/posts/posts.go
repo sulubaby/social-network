@@ -2,316 +2,1066 @@ package posts
 
 import (
 	"database/sql"
-	"errors"
 	"fmt"
+	"log"
+	"social/database/dbutil"
+	"social/database/users"
 	"social/internal/models"
-	"strconv"
 	"strings"
 )
 
-// the location text cant be longer than this
-const maxLocationLength = 200
+func AddPost(db *sql.DB, post models.RegsiterPost) (int, error) {
+	var groupID interface{}
+	public := 0
+	private := 0
 
-// errors for the "selected followers" privacy option
-var (
-	ErrSelectedFollowersRequired = errors.New("select at least one follower")
-	ErrInvalidPostViewer         = errors.New("selected viewers must follow the post author")
-)
+	log.Println("groupID", post.GroupID)
 
-// CreatePost saves a new post. for "selected" posts it also saves who can see it.
-// its all in one transaction, so if one step fails nothing gets saved
-func CreatePost(db *sql.DB, userID int, request models.CreatePostRequest) (models.Post, error) {
+	if post.GroupID > 0 {
+		var exists int
+
+		err := db.QueryRow(`
+			SELECT 1
+			FROM user_posts_groups
+			WHERE id = ?
+		`, post.GroupID).Scan(&exists)
+
+		if err != nil {
+			if err == sql.ErrNoRows {
+				return 0, fmt.Errorf("group %d does not exist", post.GroupID)
+			}
+			return 0, err
+		}
+
+		groupID = post.GroupID
+	} else if post.GroupID == -1 {
+		private = 1
+	} else {
+		public = 1
+	}
+
 	tx, err := db.Begin()
 	if err != nil {
-		return models.Post{}, err
+		return 0, err
 	}
+
 	defer tx.Rollback()
 
-	// if the privacy is selected, every picked person must really follow me
-	selectedIDs := uniqueIDs(request.SelectedFollowerIDs)
-	if request.Privacy == models.PostPrivacySelected {
-		if len(selectedIDs) == 0 {
-			return models.Post{}, ErrSelectedFollowersRequired
-		}
-
-		for _, viewerID := range selectedIDs {
-			var followsAuthor int
-			err = tx.QueryRow(`
-				SELECT COUNT(*)
-				FROM user_followers AS follows
-				WHERE follower_id = ? AND target_id = ? AND status = 1
-			`, viewerID, userID).Scan(&followsAuthor)
-			if err != nil {
-				return models.Post{}, err
-			}
-			if followsAuthor == 0 {
-				return models.Post{}, ErrInvalidPostViewer
-			}
-		}
-	}
-
-	// save the post itself (group_id is NULL because this is not a group post)
 	result, err := tx.Exec(`
-	INSERT INTO posts (type, title, content, image_path, user_id, group_id, privacy, location)
-	VALUES ('post', '', ?, ?, ?, NULL, ?, ?)
-	`, request.Content, request.ImagePath, userID, request.Privacy, nullableText(request.Location))
-	if err != nil {
-		return models.Post{}, err
-	}
-
-	postID, err := result.LastInsertId()
-	if err != nil {
-		return models.Post{}, err
-	}
-
-	// save the list of people allowed to see this post
-	if request.Privacy == models.PostPrivacySelected {
-		for _, viewerID := range selectedIDs {
-			_, err = tx.Exec(`
-				INSERT INTO post_viewers (post_id, viewer_id)
-				VALUES (?, ?)
-			`, postID, viewerID)
-			if err != nil {
-				return models.Post{}, err
-			}
-		}
-	}
-
-	if err = tx.Commit(); err != nil {
-		return models.Post{}, err
-	}
-
-	return GetPostByID(db, postID)
-}
-
-// GetPostByID gets one post with the author name and avatar
-func GetPostByID(db *sql.DB, postID int64) (models.Post, error) {
-	var post models.Post
-
-	err := db.QueryRow(`
-		SELECT
-			posts.id,
-			posts.user_id,
-			users.first_name || ' ' || users.last_name,
-			COALESCE(profile.avatar_path, ''),
-			posts.content,
-			posts.image_path,
-			posts.privacy,
-			COALESCE(posts.location, ''),
-			posts.created_at,
-			posts.like_count,
-			posts.comment_count
-		FROM posts
-		JOIN user AS users ON users.id = posts.user_id
-		LEFT JOIN profile ON profile.user_id = users.id
-		WHERE posts.id = ?
-	`, postID).Scan(
-		&post.ID,
-		&post.UserID,
-		&post.Author,
-		&post.AvatarPath,
-		&post.Content,
-		&post.ImagePath,
-		&post.Privacy,
-		&post.Location,
-		&post.CreatedAt,
-		&post.LikeCount,
-		&post.CommentCount,
+		INSERT INTO posts (
+			user_id,
+			content,
+			image_path,
+			allow_comments,
+			location,
+			group_id,
+			public,
+			private
+		)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`,
+		post.UserID,
+		post.Content,
+		post.Image_path,
+		post.AllowComments,
+		post.Location,
+		groupID,
+		public,
+		private,
 	)
 
-	return post, err
-}
-
-// ListFeedPosts builds the home feed for the logged in user.
-// a post shows up if: its mine, or its public, or its for followers and i follow
-// the author, or its selected and i am in the list.
-// liked tells the frontend if i already liked the post
-func ListFeedPosts(db *sql.DB, viewerID int, pagination ...int) ([]models.Post, error) {
-	query := visiblePostsQuery + `
-		ORDER BY posts.created_at DESC, posts.id DESC
-	`
-	args := []any{viewerID, viewerID, viewerID, viewerID, viewerID}
-	if len(pagination) >= 2 {
-		query += ` LIMIT ? OFFSET ?`
-		args = append(args, pagination[0], pagination[1])
-	}
-
-	return queryPosts(db, query, args...)
-}
-
-// visiblePostsQuery is the SELECT for posts the viewer is allowed to see.
-// it needs the viewer id 5 times (liked, mine, public, followers, selected).
-// the feed and the profile page both start from this
-const visiblePostsQuery = `
-		SELECT
-			posts.id,
-			posts.user_id,
-			users.first_name || ' ' || users.last_name,
-			COALESCE(profile.avatar_path, ''),
-			posts.content,
-			posts.image_path,
-			posts.privacy,
-			COALESCE(posts.location, ''),
-			posts.created_at,
-			posts.like_count,
-			EXISTS (
-				SELECT 1
-				FROM post_reactions AS viewer_reactions
-				WHERE viewer_reactions.post_id = posts.id
-				AND viewer_reactions.user_id = ?
-				AND viewer_reactions.value = 1
-			) AS liked,
-			posts.comment_count
-		FROM posts
-		JOIN user AS users ON users.id = posts.user_id
-		LEFT JOIN profile ON profile.user_id = users.id
-		WHERE posts.group_id IS NULL
-		AND (
-			posts.user_id = ?
-			OR (
-				posts.privacy = 'public'
-				-- a private account's posts are only for its followers, even the public ones
-				AND (
-					NOT EXISTS (
-						SELECT 1 FROM profile AS author_profile
-						WHERE author_profile.user_id = posts.user_id AND author_profile.is_private = 1
-					)
-					OR EXISTS (
-						SELECT 1 FROM user_followers AS public_follows
-						WHERE public_follows.follower_id = ? AND public_follows.target_id = posts.user_id AND public_follows.status = 1
-					)
-				)
-			)
-			OR (
-				posts.privacy = 'followers'
-				AND EXISTS (
-					SELECT 1
-					FROM user_followers AS follows
-					WHERE follows.follower_id = ?
-					AND follows.target_id = posts.user_id
-					AND follows.status = 1
-				)
-			)
-			OR (
-				posts.privacy = 'selected'
-				AND EXISTS (
-					SELECT 1
-					FROM post_viewers
-					WHERE post_viewers.post_id = posts.id
-					AND post_viewers.viewer_id = ?
-				)
-			)
-		)
-`
-
-// queryPosts runs a posts query and reads every row into a Post
-func queryPosts(db *sql.DB, query string, args ...any) ([]models.Post, error) {
-	rows, err := db.Query(query, args...)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
-	defer rows.Close()
 
-	posts := []models.Post{}
-	for rows.Next() {
-		var post models.Post
-		err = rows.Scan(
-			&post.ID,
-			&post.UserID,
-			&post.Author,
-			&post.AvatarPath,
-			&post.Content,
-			&post.ImagePath,
-			&post.Privacy,
-			&post.Location,
-			&post.CreatedAt,
-			&post.LikeCount,
-			&post.Liked,
-			&post.CommentCount,
-		)
+	id, err := result.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+
+	if err := dbutil.InsertTags(tx, dbutil.PostTagsTable, int(id), post.PeopleTagged); err != nil {
+		return 0, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+
+	return int(id), nil
+}
+
+func GroupExists(db *sql.DB, groupID, userID int) error {
+	if groupID == 0 || groupID == -1 {
+		return nil
+	}
+
+	err := db.QueryRow(`
+		SELECT 1 FROM user_posts_groups WHERE id = ? AND user_id = ?
+	`, groupID, userID)
+
+	return err.Err()
+}
+
+func GetHomePosts(db *sql.DB, userID, offset int) ([]models.Post, error) {
+	var posts []models.Post
+
+	seen := make(map[int]bool)
+	appendPosts := func(rows *sql.Rows) error {
+		defer rows.Close()
+
+		for rows.Next() {
+			var p models.Post
+			var username sql.NullString
+			var avatarPath sql.NullString
+
+			if err := rows.Scan(
+				&p.Id,
+				&p.UserId,
+				&p.FirstName,
+				&p.LastName,
+				&username,
+				&avatarPath,
+				&p.Content,
+				&p.ImagePath,
+				&p.AllowComments,
+				&p.Location,
+				&p.CreatedAt,
+				&p.GroupId,
+				&p.ReactionValue,
+				&p.LikeCount,
+				&p.DisLikeCount,
+				&p.CommentCount,
+			); err != nil {
+				return err
+			}
+
+			if username.Valid {
+				p.Username = &username.String
+			}
+
+			if avatarPath.Valid {
+				p.AvatarPath = avatarPath.String
+			}
+
+			if !seen[p.Id] {
+				seen[p.Id] = true
+				posts = append(posts, p)
+			}
+		}
+
+		return rows.Err()
+	}
+
+	excludeClause := func() (string, []interface{}) {
+		if len(posts) == 0 {
+			return "", nil
+		}
+
+		placeholders := make([]string, len(posts))
+		args := make([]interface{}, len(posts))
+
+		for i, p := range posts {
+			placeholders[i] = "?"
+			args[i] = p.Id
+		}
+
+		return " AND p.id NOT IN (" + strings.Join(placeholders, ",") + ")", args
+	}
+
+	idsToPlaceholders := func(ids []int) (string, []interface{}) {
+		if len(ids) == 0 {
+			return "", nil
+		}
+
+		placeholders := make([]string, len(ids))
+		args := make([]interface{}, len(ids))
+
+		for i, id := range ids {
+			placeholders[i] = "?"
+			args[i] = id
+		}
+
+		return strings.Join(placeholders, ","), args
+	}
+
+	getFriendIDs := func() ([]int, error) {
+		rows, err := db.Query(`
+			SELECT uf1.target_id
+			FROM user_followers uf1
+			JOIN user_followers uf2
+				ON uf1.target_id = uf2.follower_id
+				AND uf1.follower_id = uf2.target_id
+			WHERE uf1.follower_id = ?
+				AND uf1.status = 1
+				AND uf2.status = 1
+		`, userID)
+
 		if err != nil {
 			return nil, err
 		}
-		posts = append(posts, post)
+
+		defer rows.Close()
+
+		var ids []int
+
+		for rows.Next() {
+			var id int
+
+			if err := rows.Scan(&id); err != nil {
+				return nil, err
+			}
+
+			ids = append(ids, id)
+		}
+
+		return ids, rows.Err()
 	}
 
-	if err = rows.Err(); err != nil {
+	getFollowingIDs := func(excludeIDs []int) ([]int, error) {
+		exClause := "0"
+		args := []interface{}{userID}
+
+		if len(excludeIDs) > 0 {
+			ph, exArgs := idsToPlaceholders(excludeIDs)
+			exClause = ph
+			args = append(args, exArgs...)
+		}
+
+		rows, err := db.Query(`
+			SELECT target_id
+			FROM user_followers
+			WHERE follower_id = ?
+				AND status = 1
+				AND target_id NOT IN (`+exClause+`)
+		`, args...)
+
+		if err != nil {
+			return nil, err
+		}
+
+		defer rows.Close()
+
+		var ids []int
+
+		for rows.Next() {
+			var id int
+
+			if err := rows.Scan(&id); err != nil {
+				return nil, err
+			}
+
+			ids = append(ids, id)
+		}
+
+		return ids, rows.Err()
+	}
+
+	runGroupsQuery := func(unviewedOnly bool, limit int) error {
+		if limit <= 0 {
+			return nil
+		}
+
+		exClause, exArgs := excludeClause()
+
+		viewClause := ""
+
+		if unviewedOnly {
+			viewClause = `
+				AND NOT EXISTS (
+					SELECT 1
+					FROM post_views pv
+					WHERE pv.post_id = p.id
+						AND pv.user_id = ?
+				)`
+		}
+
+		query := `
+			SELECT
+				p.id,
+				p.user_id,
+				u.first_name,
+				u.last_name,
+				u.username,
+				pr.avatar_path,
+				p.content,
+				p.image_path,
+				p.allow_comments,
+				p.location,
+				p.created_at,
+				p.group_id,
+				COALESCE(prx.value, 0),
+				p.like_count,
+				p.dislike_count,
+				p.comment_count
+			FROM posts p
+			JOIN user_posts_groups g
+				ON p.group_id = g.id
+			JOIN user u
+				ON u.id = p.user_id
+			LEFT JOIN profile pr
+				ON pr.user_id = p.user_id
+			LEFT JOIN post_reactions prx
+				ON prx.post_id = p.id
+				AND prx.user_id = ?
+			WHERE (':' || g.users || ':') LIKE ('%:' || ? || ':%')` +
+			exClause +
+			viewClause + `
+			ORDER BY p.created_at DESC
+			LIMIT ?
+		`
+
+		args := []interface{}{userID, userID}
+
+		args = append(args, exArgs...)
+
+		if unviewedOnly {
+			args = append(args, userID)
+		}
+
+		args = append(args, limit)
+
+		rows, err := db.Query(query, args...)
+
+		if err != nil {
+			return err
+		}
+
+		return appendPosts(rows)
+	}
+
+	runUserPostsQuery := func(userIDs []int, includePrivate bool, unviewedOnly bool, limit int) error {
+		if len(userIDs) == 0 || limit <= 0 {
+			return nil
+		}
+
+		userPh, userArgs := idsToPlaceholders(userIDs)
+
+		exClause, exArgs := excludeClause()
+
+		visibilityClause := `
+			AND p.public = 1
+		`
+
+		if includePrivate {
+			visibilityClause = `
+				AND (
+					p.public = 1
+					OR p.private = 1
+				)
+			`
+		}
+
+		viewClause := ""
+
+		if unviewedOnly {
+			viewClause = `
+				AND NOT EXISTS (
+					SELECT 1
+					FROM post_views pv
+					WHERE pv.post_id = p.id
+						AND pv.user_id = ?
+				)`
+		}
+
+		query := `
+			SELECT
+				p.id,
+				p.user_id,
+				u.first_name,
+				u.last_name,
+				u.username,
+				pr.avatar_path,
+				p.content,
+				p.image_path,
+				p.allow_comments,
+				p.location,
+				p.created_at,
+				p.group_id,
+				COALESCE(prx.value, 0),
+				p.like_count,
+				p.dislike_count,
+				p.comment_count
+			FROM posts p
+			JOIN user u
+				ON u.id = p.user_id
+			LEFT JOIN profile pr
+				ON pr.user_id = p.user_id
+			LEFT JOIN post_reactions prx
+				ON prx.post_id = p.id
+				AND prx.user_id = ?
+			WHERE p.user_id IN (` + userPh + `)
+				` + visibilityClause +
+			exClause +
+			viewClause + `
+			ORDER BY p.created_at DESC
+			LIMIT ?
+		`
+
+		var args []interface{}
+
+		args = append(args, userID)
+		args = append(args, userArgs...)
+		args = append(args, exArgs...)
+
+		if unviewedOnly {
+			args = append(args, userID)
+		}
+
+		args = append(args, limit)
+
+		rows, err := db.Query(query, args...)
+
+		if err != nil {
+			return err
+		}
+
+		return appendPosts(rows)
+	}
+
+	runRandomQuery := func(excludeUserIDs []int, unviewedOnly bool, limit int, withOffset bool) error {
+		if limit <= 0 {
+			return nil
+		}
+
+		exClause, exArgs := excludeClause()
+
+		excludeUserClause := ""
+		var excludeUserArgs []interface{}
+
+		if len(excludeUserIDs) > 0 {
+			ph, uargs := idsToPlaceholders(excludeUserIDs)
+
+			excludeUserClause = " AND p.user_id NOT IN (" + ph + ")"
+			excludeUserArgs = uargs
+		}
+
+		viewClause := ""
+
+		if unviewedOnly {
+			viewClause = `
+				AND NOT EXISTS (
+					SELECT 1
+					FROM post_views pv
+					WHERE pv.post_id = p.id
+						AND pv.user_id = ?
+				)`
+		}
+
+		offsetClause := ""
+
+		if withOffset {
+			offsetClause = " OFFSET ?"
+		}
+
+		query := `
+			SELECT
+				p.id,
+				p.user_id,
+				u.first_name,
+				u.last_name,
+				u.username,
+				pr.avatar_path,
+				p.content,
+				p.image_path,
+				p.allow_comments,
+				p.location,
+				p.created_at,
+				p.group_id,
+				COALESCE(prx.value, 0),
+				p.like_count,
+				p.dislike_count,
+				p.comment_count
+			FROM posts p
+			JOIN user u
+				ON u.id = p.user_id
+			LEFT JOIN profile pr
+				ON pr.user_id = p.user_id
+			LEFT JOIN post_reactions prx
+				ON prx.post_id = p.id
+				AND prx.user_id = ?
+			WHERE p.public = 1
+				AND p.user_id != ?` +
+			excludeUserClause +
+			exClause +
+			viewClause + `
+			ORDER BY p.created_at DESC
+			LIMIT ?` +
+			offsetClause
+
+		args := []interface{}{userID, userID}
+
+		args = append(args, excludeUserArgs...)
+		args = append(args, exArgs...)
+
+		if unviewedOnly {
+			args = append(args, userID)
+		}
+
+		args = append(args, limit)
+
+		if withOffset {
+			args = append(args, offset)
+		}
+
+		rows, err := db.Query(query, args...)
+
+		if err != nil {
+			return err
+		}
+
+		return appendPosts(rows)
+	}
+
+	friendIDs, err := getFriendIDs()
+	if err != nil {
+		return nil, err
+	}
+
+	followingIDs, err := getFollowingIDs(friendIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := runGroupsQuery(true, 5); err != nil {
+		return nil, err
+	}
+
+	if len(posts) < 9 {
+		remaining := 9 - len(posts)
+
+		if remaining > 4 {
+			remaining = 4
+		}
+
+		if err := runUserPostsQuery(
+			friendIDs,
+			true,
+			true,
+			remaining,
+		); err != nil {
+			return nil, err
+		}
+	}
+
+	if len(posts) < 12 {
+		remaining := 12 - len(posts)
+
+		if remaining > 3 {
+			remaining = 3
+		}
+
+		if err := runUserPostsQuery(
+			followingIDs,
+			true,
+			true,
+			remaining,
+		); err != nil {
+			return nil, err
+		}
+	}
+
+	if len(posts) < 13 {
+		remaining := 13 - len(posts)
+
+		excluded := append(
+			append([]int{}, friendIDs...),
+			followingIDs...,
+		)
+
+		if err := runRandomQuery(
+			excluded,
+			true,
+			remaining,
+			false,
+		); err != nil {
+			return nil, err
+		}
+	}
+
+	if len(posts) < 13 {
+		remaining := 13 - len(posts)
+
+		if err := runGroupsQuery(false, remaining); err != nil {
+			return nil, err
+		}
+	}
+
+	if len(posts) < 13 {
+		remaining := 13 - len(posts)
+
+		if err := runUserPostsQuery(
+			friendIDs,
+			true,
+			false,
+			remaining,
+		); err != nil {
+			return nil, err
+		}
+	}
+
+	if len(posts) < 13 {
+		remaining := 13 - len(posts)
+
+		if err := runUserPostsQuery(
+			followingIDs,
+			true,
+			false,
+			remaining,
+		); err != nil {
+			return nil, err
+		}
+	}
+
+	if len(posts) < 13 {
+		remaining := 13 - len(posts)
+
+		excluded := append(
+			append([]int{}, friendIDs...),
+			followingIDs...,
+		)
+
+		if err := runRandomQuery(
+			excluded,
+			false,
+			remaining,
+			true,
+		); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := attachGroupOwnerNames(db, posts); err != nil {
+		return nil, err
+	}
+
+	if err := attachTaggedPeople(db, &posts); err != nil {
+		return nil, err
+	}
+	
+	return posts, nil
+}
+
+func GetHomeVideos(db *sql.DB, userID, offset, limit int) ([]models.Post, error) {
+	rows, err := db.Query(`
+		SELECT
+			p.id,
+			p.user_id,
+			u.first_name,
+			u.last_name,
+			u.username,
+			pr.avatar_path,
+			p.content,
+			p.image_path,
+			p.allow_comments,
+			p.location,
+			p.created_at,
+			p.group_id,
+			COALESCE(prx.value, 0),
+			p.like_count,
+			p.dislike_count,
+			p.comment_count
+		FROM posts p
+		JOIN user u
+			ON u.id = p.user_id
+		LEFT JOIN profile pr
+			ON pr.user_id = p.user_id
+		LEFT JOIN post_reactions prx
+			ON prx.post_id = p.id
+			AND prx.user_id = ?
+		LEFT JOIN user_posts_groups g
+			ON g.id = p.group_id
+		WHERE LOWER(p.image_path) LIKE '%.mp4'
+			AND (
+				(
+					g.id IS NOT NULL
+					AND (':' || g.users || ':') LIKE ('%:' || ? || ':%')
+				)
+				OR (
+					p.user_id != ?
+					AND (
+						p.public = 1
+						OR (
+							p.private = 1
+							AND EXISTS (
+								SELECT 1
+								FROM user_followers uf
+								WHERE uf.follower_id = ?
+									AND uf.target_id = p.user_id
+									AND uf.status = 1
+							)
+						)
+					)
+				)
+			)
+		ORDER BY p.created_at DESC, p.id DESC
+		LIMIT ?
+		OFFSET ?
+	`, userID, userID, userID, userID, limit, offset)
+
+	if err != nil {
+		return nil, err
+	}
+
+	defer rows.Close()
+
+	var videos []models.Post
+
+	for rows.Next() {
+		var p models.Post
+		var username sql.NullString
+		var avatarPath sql.NullString
+
+		if err := rows.Scan(
+			&p.Id,
+			&p.UserId,
+			&p.FirstName,
+			&p.LastName,
+			&username,
+			&avatarPath,
+			&p.Content,
+			&p.ImagePath,
+			&p.AllowComments,
+			&p.Location,
+			&p.CreatedAt,
+			&p.GroupId,
+			&p.ReactionValue,
+			&p.LikeCount,
+			&p.DisLikeCount,
+			&p.CommentCount,
+		); err != nil {
+			return nil, err
+		}
+
+		if username.Valid {
+			p.Username = &username.String
+		}
+
+		if avatarPath.Valid {
+			p.AvatarPath = avatarPath.String
+		}
+
+		videos = append(videos, p)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	if err := attachGroupOwnerNames(db, videos); err != nil {
+		return nil, err
+	}
+
+	if err := attachTaggedPeople(db, &videos); err != nil {
+		return nil, err
+	}
+
+	return videos, nil
+}
+
+func attachGroupOwnerNames(db *sql.DB, posts []models.Post) error {
+	groupIDSet := make(map[int]bool)
+	for _, p := range posts {
+		if p.GroupId != nil && *p.GroupId != 0 && *p.GroupId != -1 {
+			groupIDSet[*p.GroupId] = true
+		}
+	}
+
+	if len(groupIDSet) == 0 {
+		return nil
+	}
+
+	placeholders := make([]string, 0, len(groupIDSet))
+	args := make([]interface{}, 0, len(groupIDSet))
+	for id := range groupIDSet {
+		placeholders = append(placeholders, "?")
+		args = append(args, id)
+	}
+
+	query := `
+		SELECT g.id, u.first_name, u.last_name
+		FROM user_posts_groups g
+		JOIN user u ON u.id = g.user_id
+		WHERE g.id IN (` + strings.Join(placeholders, ",") + `)
+	`
+
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	ownerNames := make(map[int]string)
+	for rows.Next() {
+		var groupID int
+		var firstName, lastName string
+		if err := rows.Scan(&groupID, &firstName, &lastName); err != nil {
+			return err
+		}
+		ownerNames[groupID] = firstName + " " + lastName
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	for i := range posts {
+		if posts[i].GroupId != nil {
+			if name, ok := ownerNames[*posts[i].GroupId]; ok {
+				posts[i].VisibilityUser = name
+			}
+		}
+	}
+
+	return nil
+}
+
+func attachTaggedPeople(db *sql.DB, posts *[]models.Post) error {
+	for i := range *posts {
+		p := &(*posts)[i]
+		
+		rows, err := db.Query(
+			`SELECT user_id FROM post_user_tags WHERE post_id = ?`,
+			p.Id,
+		)
+		if err != nil {
+			return err
+		}
+
+		var tags []models.TaggedPerson
+
+		for rows.Next() {
+			var id int
+
+			if err := rows.Scan(&id); err != nil {
+				rows.Close()
+				return err
+			}
+			
+			userData, err := users.GetUserSimpleData(db, id)
+			if err != nil {
+				rows.Close()
+				return err
+			}
+
+			tags = append(tags, models.TaggedPerson{
+				FirstName:  userData.FirstName,
+				LastName:   userData.LastName,
+				AvatarPath: userData.Avatar,
+				Id:         userData.ID,
+			})
+		}
+
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return err
+		}
+
+		rows.Close()
+
+		p.TaggedPeople = tags
+	}
+
+	
+	return nil
+}
+
+func GetUserPosts(db *sql.DB, targetID, offset, limit int, videosOnly bool) ([]models.Post, error) {
+	var posts []models.Post
+
+	videoCondition := ""
+
+	if videosOnly {
+		videoCondition = "AND LOWER(p.image_path) LIKE '%.mp4'"
+	}
+
+	rows, err := db.Query(`
+		SELECT
+			p.id,
+			u.id,
+			u.first_name,
+			u.last_name,
+			p.content,
+			p.image_path,
+			p.allow_comments,
+			p.location,
+			p.group_id,
+			p.created_at,
+			p.like_count,
+			p.dislike_count,
+			p.comment_count,
+			p.public,
+			p.private
+		FROM user u
+		JOIN posts p
+			ON p.user_id = u.id
+		WHERE p.user_id = ?
+		`+videoCondition+`
+		ORDER BY p.created_at DESC, p.id DESC
+		LIMIT ?
+		OFFSET ?
+	`, targetID, limit, offset)
+
+	if err != nil {
+		return nil, err
+	}
+
+	defer rows.Close()
+
+	var avatar string
+
+	err = db.QueryRow(`
+		SELECT avatar_path
+		FROM profile
+		WHERE user_id = ?
+	`, targetID).Scan(&avatar)
+
+	if err != nil && err != sql.ErrNoRows {
+		return nil, err
+	}
+
+	for rows.Next() {
+		var p models.Post
+
+		err := rows.Scan(
+			&p.Id,
+			&p.UserId,
+			&p.FirstName,
+			&p.LastName,
+			&p.Content,
+			&p.ImagePath,
+			&p.AllowComments,
+			&p.Location,
+			&p.GroupId,
+			&p.CreatedAt,
+			&p.LikeCount,
+			&p.DisLikeCount,
+			&p.CommentCount,
+			&p.Public,
+			&p.Private,
+		)
+
+		if err != nil {
+			return nil, err
+		}
+
+		p.AvatarPath = avatar
+
+		if p.GroupId != nil && *p.GroupId > 0 {
+			var groupName string
+
+			err = db.QueryRow(`
+				SELECT name
+				FROM user_posts_groups
+				WHERE id = ?
+			`, *p.GroupId).Scan(&groupName)
+
+			if err != nil && err != sql.ErrNoRows {
+				return nil, err
+			}
+
+			p.GroupName = groupName
+		}
+
+		posts = append(posts, p)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	if err := attachTaggedPeople(db, &posts); err != nil {
 		return nil, err
 	}
 
 	return posts, nil
 }
 
-// uniqueIDs removes duplicates and bad ids (0 or less) from a list
-func uniqueIDs(ids []int) []int {
-	seen := make(map[int]bool)
-	unique := make([]int, 0, len(ids))
+func DeletePost(db *sql.DB, postID, userID int) error {
+	result, err := db.Exec(`
+		DELETE FROM posts
+		WHERE id = ?
+		AND user_id = ?
+	`, postID, userID)
 
-	for _, id := range ids {
-		if id <= 0 || seen[id] {
-			continue
-		}
-		seen[id] = true
-		unique = append(unique, id)
+	if err != nil {
+		return err
 	}
 
-	return unique
-}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
 
-// IsPostPrivacy checks the privacy is public, followers or selected
-func IsPostPrivacy(value string) bool {
-	switch value {
-	case models.PostPrivacyPublic, models.PostPrivacyFollowers, models.PostPrivacySelected:
-		return true
-	default:
-		return false
+	if rows == 0 {
+		return sql.ErrNoRows
 	}
-}
 
-// ValidateSelectedIDs: selected privacy needs at least one person,
-// and the other privacy types shouldnt send a list at all
-func ValidateSelectedIDs(privacy string, ids []int) error {
-	if privacy == models.PostPrivacySelected && len(uniqueIDs(ids)) == 0 {
-		return ErrSelectedFollowersRequired
-	}
-	if privacy != models.PostPrivacySelected && len(ids) > 0 {
-		return fmt.Errorf("selected followers are only allowed for selected privacy")
-	}
 	return nil
 }
 
-// nullableText saves NULL in the database instead of an empty string
-func nullableText(value string) any {
-	if value == "" {
-		return nil
-	}
-	return value
+func ViewPost(db *sql.DB, postID, userID int) error {
+	_, err := db.Exec(`
+		INSERT INTO post_views (user_id, post_id)
+		VALUES (?,?)
+	`, userID, postID)
+	return err
 }
 
-// IsValidLocation checks the location looks like "name:lat:lon".
-// empty is fine because location is optional
-func IsValidLocation(value string) bool {
-	if value == "" {
-		return true
-	}
-	if len([]rune(value)) > maxLocationLength {
-		return false
+func SearchMembers(db *sql.DB, groupID int, search string) (map[int]models.UserRegistration, error) {
+	search = strings.TrimSpace(search)
+
+	rows, err := db.Query(`
+		SELECT
+			u.id,
+			u.first_name,
+			u.last_name,
+			u.avatar
+		FROM users u
+		INNER JOIN groups_users gu
+			ON gu.user_id = u.id
+		WHERE gu.group_id = ?
+		AND gu.status = 1
+		AND (
+			u.first_name LIKE ?
+			OR u.last_name LIKE ?
+			OR (u.first_name || ' ' || u.last_name) LIKE ?
+		)
+		ORDER BY u.first_name, u.last_name
+		LIMIT 10
+	`,
+		groupID,
+		"%"+search+"%",
+		"%"+search+"%",
+		"%"+search+"%",
+	)
+
+	if err != nil {
+		return nil, err
 	}
 
-	parts := strings.Split(value, ":")
-	if len(parts) != 3 || strings.TrimSpace(parts[0]) == "" {
-		return false
+	defer rows.Close()
+
+	users := make(map[int]models.UserRegistration)
+
+	for rows.Next() {
+		var user models.UserRegistration
+
+		err := rows.Scan(
+			&user.ID,
+			&user.FirstName,
+			&user.LastName,
+			&user.Avatar,
+		)
+
+		if err != nil {
+			return nil, err
+		}
+
+		users[user.ID] = user
 	}
 
-	lat, err := strconv.ParseFloat(parts[1], 64)
-	if err != nil || !(lat >= -90 && lat <= 90) {
-		return false
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 
-	lon, err := strconv.ParseFloat(parts[2], 64)
-	if err != nil || !(lon >= -180 && lon <= 180) {
-		return false
-	}
-
-	return true
+	return users, nil
 }

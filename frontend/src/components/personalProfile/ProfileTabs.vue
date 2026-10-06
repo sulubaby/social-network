@@ -1,32 +1,108 @@
 <script setup>
-import { computed } from 'vue'
+import { onMounted, ref } from 'vue';
+
+const emit = defineEmits(['changeTab']);
 
 const props = defineProps({
-  type: { type: String, default: 'personal' },
-  modelValue: { type: String, default: 'about' },
-})
-const emit = defineEmits(['update:modelValue', 'changeTab'])
-const tabs = computed(() => props.type === 'personal'
-  ? ['posts', 'about', 'followers', 'following', 'friends']
-  : ['posts', 'about', 'followers', 'following'])
+    type: {
+        type: String,
+        default: 'personal'
+    }
+});
+
+const activeTab = ref('about');
+
+let tabs = [];
+
+if (props.type === 'personal') {
+    tabs = [
+        'posts',
+        'friends',
+        'groups',
+        'following',
+        'followers',
+        'about'
+    ];
+} else {
+    tabs = [
+        'posts',
+        'following',
+        'followers',
+        'about'
+    ];
+}
 
 function selectTab(tab) {
-  emit('update:modelValue', tab)
-  emit('changeTab', tab)
+    activeTab.value = tab;
+    emit('changeTab', tab);
 }
+
+onMounted(() => {
+    selectTab('about');
+});
 </script>
 
 <template>
-  <nav class="profile-tabs" aria-label="Profile sections">
-    <button v-for="tab in tabs" :key="tab" type="button" :class="{ active: modelValue === tab }" @click="selectTab(tab)">
-      {{ tab }}
-    </button>
-  </nav>
+    <nav class="profile-tabs">
+        <button
+            v-for="tab in tabs"
+            :key="tab"
+            type="button"
+            :class="{ active: activeTab === tab }"
+            @click="selectTab(tab)"
+        >
+            {{ tab }}
+        </button>
+    </nav>
 </template>
 
 <style scoped>
-.profile-tabs { position: sticky; top: 4rem; z-index: 10; display: flex; overflow-x: auto; border-bottom: 1px solid var(--color-border); background: rgb(var(--rgb-background) / 94%); backdrop-filter: blur(.75rem); }
-.profile-tabs button { min-width: max-content; min-height: var(--touch-target); flex: 1; padding: 0 var(--space-4); border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--color-text-muted); cursor: pointer; font-family: var(--font-meta); font-size: .75rem; font-weight: 600; text-transform: capitalize; }
-.profile-tabs button:hover { color: var(--color-text); }
-.profile-tabs button.active { border-bottom-color: var(--color-mint); color: var(--color-mint); }
+.profile-tabs {
+    position: sticky;
+    top: 64px;
+    z-index: 50;
+    display: flex;
+    margin: 25px 0;
+    overflow-x: auto;
+    border: 2px solid var(--main-color);
+    border-radius: 6px;
+    background: var(--bg-color);
+    box-shadow: 5px 5px var(--main-color);
+}
+
+.profile-tabs button {
+    flex: 1;
+    min-width: 105px;
+    padding: 15px 18px;
+    border: 0;
+    border-right: 2px solid var(--main-color);
+    background: transparent;
+    color: var(--font-color-sub);
+    text-align: center;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.profile-tabs button:last-child {
+    border-right: 0;
+}
+
+.profile-tabs button:hover {
+    background: var(--page-background);
+    color: var(--main-color);
+}
+
+.profile-tabs button.active {
+    background: var(--input-focus);
+    color: white;
+}
+
+@media (max-width: 800px) {
+    .profile-tabs {
+        top: 0;
+    }
+}
 </style>
+

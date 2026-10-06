@@ -1,2 +1,0 @@
-ALTER TABLE groups
-ADD COLUMN creator_id INTEGER REFERENCES user(id);

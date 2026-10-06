@@ -4,24 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"log"
 	"net/http"
 	"social/database/users"
+	"social/internal/app/tokens"
+
+	"golang.org/x/net/websocket"
 )
 
-/*
-A middle ware so simply takes a handler and returns a handler
-
-In this handler we check if the user is authoniticated by reading the session id from the cookie and finding it in the
-sessions table (it must not be expired). then write the user ID in the request Context for the callback to use it.
-
-Paramters:
-
-	handler http.HandleFunc
-
-Returns:
-
-	http.HandleFunc
-*/
 func (app *App) AuthMiddleware(handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		cookie, err := r.Cookie("token")
@@ -35,13 +25,24 @@ func (app *App) AuthMiddleware(handler http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		userID, err := users.SessionUser(app.DB, cookie.Value)
-		if err == sql.ErrNoRows {
+		payload, err := tokens.VerifyToken(cookie.Value)
+		if err != nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
 			json.NewEncoder(w).Encode(map[string]any{
 				"status":  false,
 				"message": "invalid or expired session",
+			})
+			return
+		}
+
+		err = users.UserExists(app.DB, payload.UserID)
+		if err == sql.ErrNoRows {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]any{
+				"status":  false,
+				"message": "invalid user",
 			})
 			return
 		}
@@ -56,8 +57,43 @@ func (app *App) AuthMiddleware(handler http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), "userID", userID)
+		ctx := context.WithValue(r.Context(), "userID", payload.UserID)
 
 		handler.ServeHTTP(w, r.WithContext(ctx))
+	}
+}
+
+func (app *App) WSAuthMiddleware(handler websocket.Handler) websocket.Handler {
+	return func(ws *websocket.Conn) {
+		cookie, err := ws.Request().Cookie("token")
+		if err != nil {
+			log.Println("websocket: not authenticated")
+			ws.Close()
+			return
+		}
+
+		payload, err := tokens.VerifyToken(cookie.Value)
+		if err != nil {
+			log.Println("websocket: invalid or expired session")
+			ws.Close()
+			return
+		}
+
+		err = users.UserExists(app.DB, payload.UserID)
+		if err != nil {
+			log.Println("websocket: invalid user")
+			ws.Close()
+			return
+		}
+
+		ctx := context.WithValue(
+			ws.Request().Context(),
+			"userID",
+			payload.UserID,
+		)
+
+		*ws.Request() = *ws.Request().WithContext(ctx)
+
+		handler(ws)
 	}
 }

@@ -1,329 +1,116 @@
 <script setup>
+import { onMounted, ref } from 'vue';
+import { useRoute } from 'vue-router';
+import { getUserData } from '@/api/users/personalProfile';
+import SideNavigation from '@/components/layout/SideNavigation.vue';
+import TopNavigation from '@/components/layout/TopNavigation.vue';
+import BackToHome from '@/components/layout/BackToHome.vue';
+import ProfileHeader from '@/components/personalProfile/ProfileHeader.vue';
+import ProfileTabs from '@/components/personalProfile/ProfileTabs.vue';
+import AboutTab from '@/components/profile/AboutTab.vue';
+import FollowersTab from '@/components/profile/FollowersTab.vue';
+import GroupTab from '@/components/personalProfile/group/GroupTab.vue';
+import { addNotification } from '@/data/notifications';
+import ProfilePostsTab from '@/components/profile/posts/ProfilePostsTab.vue';
+import { activePage } from '@/data/chatState';
 
-import { onMounted, onUnmounted, ref } from 'vue'
+const route = useRoute();
 
-import { getUserData } from '@/api/users/personalProfile'
-import { updatePrivacy } from '@/api/users/editProfile.js'
-import { addNotification } from '@/data/notifications'
-import { getPosts } from '@/api/posts/posts.js'
-import { toProfileCardPost } from '@/helpers/profilePosts.js'
-import { profileData } from '@/data/usersData'
+const loading = ref(true);
+const user = ref(null);
+const activeTab = ref('personal');
+activePage.value = 'personalProfile';
 
-import AuthenticatedLayout from '@/components/layout/AuthenticatedLayout.vue'
-import ProfileHeader from '@/components/personalProfile/ProfileHeader.vue'
-import ProfileTabs from '@/components/personalProfile/ProfileTabs.vue'
-import AboutTab from '@/components/Profile/AboutTab.vue'
-import FollowersTab from '@/components/Profile/FollowersTab.vue'
-import PostCard from '@/components/posts/PostCard.vue'
-
-const activeTab = ref('posts')
-const loading = ref(true)
-const loadingMore = ref(false)
-const error = ref('')
-
-const posts = ref([])
-
-const limit = 20
-const offset = ref(0)
-const hasMore = ref(true)
-
-let throttleTimeout = null
-
-// the public / private switch on my profile, it asks first
-async function changePrivacy(makePrivate) {
-  const question = makePrivate
-    ? 'Make your profile private? Only your followers will see your posts and info, and new followers must send a request.'
-    : 'Make your profile public? Everyone will see your posts and info, and people waiting for you to accept them will become followers.'
-  if (!window.confirm(question)) return
-
-  try {
-    await updatePrivacy(makePrivate)
-    profileData.userInfo.isPrivate = makePrivate ? 1 : 0
-    addNotification(makePrivate ? 'Your profile is private now' : 'Your profile is public now', 'success')
-  } catch (err) {
-    addNotification(err.message || 'Could not change privacy', 'error')
-  }
+async function getData() {
+    try {
+        user.value = await getUserData();
+    } catch (err) {
+        addNotification('Could not get user data', 'error');
+        console.error(err);
+    } finally {
+        loading.value = false;
+    }
 }
 
-async function loadPosts(loadMore = false) {
-  if (loadMore) {
-    if (loadingMore.value || !hasMore.value) {
-      return
-    }
-
-    loadingMore.value = true
-  }
-
-  try {
-    // only my own posts, 20 at a time
-    const result = await getPosts({
-      limit,
-      offset: offset.value,
-      userId: profileData.userInfo.id,
-    })
-
-    const newPosts = (result?.posts || []).map(
-      (post, index) => toProfileCardPost(post, posts.value.length + index),
-    )
-
-    if (loadMore) {
-      posts.value.push(...newPosts)
-    } else {
-      posts.value = newPosts
-    }
-
-    hasMore.value = result?.hasMore === true
-
-    if (typeof result?.nextOffset === 'number') {
-      offset.value = result.nextOffset
-    } else {
-      offset.value += newPosts.length
-    }
-  } catch (err) {
-    console.error(err)
-
-    if (!loadMore) {
-      error.value = err.message || 'Could not load your profile.'
-    }
-  } finally {
-    if (loadMore) {
-      loadingMore.value = false
-    } else {
-      loading.value = false
-    }
-  }
-
-}
-
-function handleScroll() {
-  if (throttleTimeout) {
-    return
-  }
-
-  throttleTimeout = setTimeout(() => {
-    throttleTimeout = null
-
-    const scrollPosition = window.innerHeight + window.scrollY
-    const pageHeight = document.documentElement.scrollHeight
-
-    if (scrollPosition >= pageHeight - 500) {
-      loadPosts(true)
-    }
-  }, 200)
-}
-
-onMounted(async () => {
-  try {
-    await getUserData()
-    await loadPosts()
-
-    window.addEventListener('scroll', handleScroll, {
-      passive: true
-    })
-  } catch (err) {
-    console.error(err)
-
-    error.value = err.message || 'Could not load your profile.'
-    loading.value = false
-  }
-})
-
-onUnmounted(() => {
-  window.removeEventListener('scroll', handleScroll)
-
-  if (throttleTimeout) {
-    clearTimeout(throttleTimeout)
-    throttleTimeout = null
-  }
-})
-
-function removePost(postID) {
-  posts.value = posts.value.filter(
-    (post) => post.id !== postID,
-  )
-  profileData.numOfPosts = Math.max(0, (profileData.numOfPosts || 0) - 1)
-}
-
+onMounted(() => {
+    getData();
+    activeTab.value = ref(
+        route.query.tab === 'posts' ? 'posts' : 'personal'
+    );
+    
+});
 </script>
 
 <template>
+    <div class="facebook-layout">
+        <TopNavigation />
 
-  <AuthenticatedLayout active-page="profile">
+        <div class="page-layout">
+            <SideNavigation />
 
-    <main class="profile-page">
+            <main class="profile-page">
+                <BackToHome />
 
-      <p v-if="loading" class="profile-state orbit-surface">
-        Loading profile...
-      </p>
+                <div v-if="loading">
+                    Loading profile...
+                </div>
 
-      <div v-else-if="error" class="profile-state profile-state--error orbit-surface" role="alert">
-        <p>{{ error }}</p>
+                <template v-else-if="user">
+                    <ProfileHeader :user-id="user.ID" :first-name="user.firstName" :last-name="user.lastName" :username="user.username"
+                        :add-edit="true" :bio="user.Profile.About?.bio" :avatar-path="`/uploads/${user.Profile.avatar}`"
+                        :num-of-posts="user.Profile.numOfPosts" :num-of-following="user.Profile.numOfFollowing"
+                        :num-of-followers="user.Profile.numOfFollowers" />
 
-        <button type="button" @click="$router.go(0)">
-          Try again
-        </button>
-      </div>
+                    <ProfileTabs type="personal" @change-tab="activeTab = $event" />
 
-      <template v-else>
+                    <AboutTab v-if="activeTab === 'about'" :about="user.Profile.About" :email="user.email" :dob="user.DOB" />
 
-        <ProfileHeader :email="profileData.userInfo.email" :first-name="profileData.userInfo.firstName" :last-name="profileData.userInfo.lastName"
-          :username="profileData.userInfo.userName" :bio="profileData.about.bio" :avatar-path="profileData.userInfo.avatar
-            ? `/uploads/${profileData.userInfo.avatar}`
-            : ''
-            " :num-of-posts="profileData.numOfPosts" :num-of-following="profileData.numOfFollowing"
-          :num-of-followers="profileData.numOfFollowers" :is-private="profileData.userInfo.isPrivate === 1" add-edit
-          @select-tab="activeTab = $event" :dob="profileData.userInfo.dob"
-          @privacy-change="changePrivacy" />
-        
-        <ProfileTabs v-model="activeTab" type="personal" />
+                    <FollowersTab v-if="activeTab === 'followers'" type="followers" :target-id="user.ID"
+                        :follower-list="user.Profile.followers" :own-profile="true" />
 
-        <section v-if="activeTab === 'posts'" class="profile-posts" aria-labelledby="profile-posts-heading">
+                    <FollowersTab v-if="activeTab === 'following'" type="following" :target-id="user.ID"
+                        :follower-list="user.Profile.following" />
 
-          <header class="profile-posts__header">
-            <h2 id="profile-posts-heading">Your posts</h2>
-            <span>{{ profileData.numOfPosts }} {{ profileData.numOfPosts === 1 ? 'post' : 'posts' }}</span>
-          </header>
+                    <FollowersTab v-if="activeTab === 'friends'" type="friends" :target-id="user.ID"
+                        :follower-list="user.Profile.friends" />
 
-          <div v-if="posts.length" class="profile-posts__grid">
-
-            <PostCard v-for="post in posts" :key="post.id" :post="post" @deleted="removePost" />
-
-          </div>
-
-          <p v-else class="profile-empty orbit-surface">
-            No posts yet.
-          </p>
-
-          <p v-if="loadingMore" class="profile-loading">
-            Loading more posts...
-          </p>
-
-          <p v-else-if="!hasMore && posts.length" class="profile-end">
-            No more posts.
-          </p>
-
-        </section>
-
-        <AboutTab v-else-if="activeTab === 'about'" :about="profileData.about" :profile="profileData.userInfo"
-          own-profile />
-
-        <FollowersTab v-else-if="activeTab === 'followers'" type="followers" :target-id="profileData.userInfo.id"
-          :follower-list="profileData.followers" own-profile />
-
-        <FollowersTab v-else-if="activeTab === 'following'" type="following" :target-id="profileData.userInfo.id"
-          :follower-list="profileData.following" own-profile />
-
-        <FollowersTab v-else-if="activeTab === 'friends'" type="friends" :target-id="profileData.userInfo.id"
-          :follower-list="profileData.friends" />
-
-      </template>
-
-    </main>
-
-  </AuthenticatedLayout>
-
+                    <ProfilePostsTab v-if="activeTab === 'posts'" :current-user-id="user.ID" />
+                    <GroupTab v-if="activeTab === 'groups'" />
+                </template>
+            </main>
+        </div>
+    </div>
 </template>
 
 <style scoped>
+.facebook-layout {
+    min-height: 100vh;
+    min-height: 100dvh;
+}
+
+.page-layout {
+    display: flex;
+    padding-top: 64px;
+}
+
 .profile-page {
-  display: grid;
-  width: 100%;
-  max-width: 64rem;
-  margin: 0 auto;
-  gap: var(--space-5);
+    width: 100%;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 25px 30px 60px;
 }
 
-.profile-state {
-  margin: 0;
-  padding: var(--space-6);
-  color: var(--color-text-muted);
-  text-align: center;
+.profile-content {
+    width: 100%;
 }
 
-.profile-state p {
-  margin: 0;
+@media (max-width: 800px) {
+    .page-layout {
+        display: block;
+    }
+
+    .profile-page {
+        padding: 20px 15px 50px;
+    }
 }
-
-.profile-state--error {
-  color: var(--color-coral);
-}
-
-.profile-state button {
-  min-height: var(--touch-target);
-  margin-top: var(--space-3);
-  padding: 0 var(--space-4);
-  border: 0;
-  border-radius: var(--radius-small);
-  background: var(--gradient-action);
-  color: white;
-  cursor: pointer;
-  font-weight: 700;
-}
-
-/* same width as the home feed column */
-.profile-posts {
-  width: 100%;
-  max-width: 48rem;
-  margin-inline: auto;
-}
-
-/* the posts title is a slim bar that sticks right under the tabs bar,
-   so it always has room and never slides under the tabs */
-.profile-posts__header {
-  position: sticky;
-  top: calc(4rem + var(--touch-target) + 1px);
-  z-index: 9;
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-3);
-  margin: 0 0 var(--space-4);
-  padding: var(--space-6) 0 var(--space-3);
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-background);
-}
-
-.profile-posts__header h2 {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 1.35rem;
-  letter-spacing: 0;
-}
-
-.profile-posts__header span {
-  color: var(--color-text-muted);
-  font-size: 0.85rem;
-}
-
-/* one post per row, same width as the home feed */
-.profile-posts__grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-4);
-}
-
-.profile-empty {
-  margin: 0;
-  padding: var(--space-6);
-  color: var(--color-text-muted);
-  text-align: center;
-}
-
-.profile-loading,
-.profile-end {
-  margin: var(--space-5) 0;
-  color: var(--color-text-muted);
-  text-align: center;
-}
-
-.profile-loading {
-  padding: var(--space-4);
-}
-
-.profile-end {
-  padding: var(--space-3);
-  opacity: 0.7;
-}
-
-
 </style>

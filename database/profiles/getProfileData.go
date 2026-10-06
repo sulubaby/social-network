@@ -3,26 +3,11 @@ package profiles
 import (
 	"database/sql"
 	"errors"
+
 	database "social/database/users"
 	"social/internal/models"
 )
 
-/*
-GetUserAbout retrieves the additional profile information and biography
-for a user.
-
-Parameters:
-	db *sql.DB, userID int
-
-Returns:
-	models.UserAbout
-	-> Struct containing the user's biography, interests, work, education,
-	   travel, website, and social media information
-
-	error
-	-> nil if successful
-	-> Error if the user's information cannot be retrieved
-*/
 func GetUserAbout(db *sql.DB, userID int) (models.UserAbout, error) {
 	var userProfile models.UserAbout
 
@@ -59,35 +44,27 @@ func GetUserAbout(db *sql.DB, userID int) (models.UserAbout, error) {
 	if work.Valid {
 		userProfile.Work = work.String
 	}
-
 	if hobbies.Valid {
 		userProfile.Hobbies = hobbies.String
 	}
-
 	if education.Valid {
 		userProfile.Education = education.String
 	}
-
 	if intrests.Valid {
 		userProfile.Intrests = intrests.String
 	}
-
 	if travel.Valid {
 		userProfile.Travel = travel.String
 	}
-
 	if website.Valid {
 		userProfile.Website = website.String
 	}
-
 	if linkedin.Valid {
 		userProfile.Linkedin = linkedin.String
 	}
-
 	if instgram.Valid {
 		userProfile.Instgram = instgram.String
 	}
-
 	if twitter.Valid {
 		userProfile.Twitter = twitter.String
 	}
@@ -111,18 +88,6 @@ func GetUserAbout(db *sql.DB, userID int) (models.UserAbout, error) {
 	return userProfile, nil
 }
 
-/*
-UpdateUserAbout updates the additional profile information for a user.
-
-Parameters:
-	db *sql.DB, userID int, userAbout *models.UserAbout
-
-Returns:
-	error
-	-> nil if the information is updated successfully
-	-> sql.ErrNoRows if no user profile was updated
-	-> Error if the database operation fails
-*/
 func UpdateUserAbout(db *sql.DB, userID int, userAbout *models.UserAbout) error {
 	result, err := db.Exec(`
 		UPDATE user_about
@@ -165,21 +130,6 @@ func UpdateUserAbout(db *sql.DB, userID int, userAbout *models.UserAbout) error 
 	return nil
 }
 
-/*
-IsPrivate checks whether a user's profile is private.
-
-Parameters:
-	db *sql.DB, userID int
-
-Returns:
-	bool
-	-> true if the profile is private
-	-> false if the profile is public
-
-	error
-	-> nil if successful
-	-> Error if the profile cannot be retrieved or contains invalid data
-*/
 func IsPrivate(db *sql.DB, userID int) (bool, error) {
 	var isPrivate sql.NullInt64
 
@@ -208,21 +158,6 @@ func IsPrivate(db *sql.DB, userID int) (bool, error) {
 	return false, errors.New("invalid data")
 }
 
-/*
-CheckFollower checks the relationship status between a follower
-and a target user.
-
-Parameters:
-	db *sql.DB, followerID int, targetID int
-
-Returns:
-	int
-	-> Follow relationship status
-
-	error
-	-> nil if successful
-	-> Error if the relationship cannot be retrieved
-*/
 func CheckFollower(db *sql.DB, followerID, targetID int) (int, error) {
 	var status sql.NullInt64
 
@@ -243,30 +178,13 @@ func CheckFollower(db *sql.DB, followerID, targetID int) (int, error) {
 	return int(status.Int64), nil
 }
 
-/*
-GetUserData retrieves complete profile information for a user,
-including their basic account information and additional profile data.
-
-Parameters:
-	db *sql.DB, userID int
-
-Returns:
-	models.UserData
-	-> Struct containing the user's complete profile information
-
-	error
-	-> nil if successful
-	-> Error if the user or profile information cannot be retrieved
-*/
 func GetUserData(db *sql.DB, userID int) (models.UserData, error) {
 	userData, err := database.GetUserData(db, userID)
-
 	if err != nil {
 		return models.UserData{}, err
 	}
 
 	userAbout, err := GetUserAbout(db, userID)
-
 	if err != nil {
 		return models.UserData{}, err
 	}
@@ -276,21 +194,6 @@ func GetUserData(db *sql.DB, userID int) (models.UserData, error) {
 	return userData, nil
 }
 
-/*
-GetPrivateProfileData retrieves limited profile information for a user,
-including their name, profile statistics, biography, and avatar.
-
-Parameters:
-	db *sql.DB, userID int
-
-Returns:
-	models.UserData
-	-> Struct containing the user's limited profile information
-
-	error
-	-> nil if successful
-	-> Error if the user or profile information cannot be retrieved
-*/
 func GetPrivateProfileData(db *sql.DB, userID int) (models.UserData, error) {
 	var userData models.UserData
 

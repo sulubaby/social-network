@@ -40,24 +40,3 @@ export async function updateAbout(data) {
     const result = await resp.json();
     return result;
 }
-// switch my profile between public and private
-export async function updatePrivacy(isPrivate) {
-    const resp = await fetch("/api/profile/privacy", {
-        method: "PATCH",
-        credentials: 'include',
-        body: JSON.stringify({ isPrivate })
-    });
-
-    if (!checkSessionResponse(resp)) {
-        router.replace("/login");
-        return;
-    }
-
-    const result = await resp.json().catch(() => ({}));
-
-    if (!resp.ok) {
-        throw new Error(result.message || 'could not change privacy')
-    }
-
-    return result;
-}

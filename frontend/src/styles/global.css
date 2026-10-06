@@ -1,125 +1,191 @@
 @import url("https://fonts.googleapis.com/css2?family=Hedvig+Letters+Sans&family=JetBrains+Mono:wght@400;500;600&family=Liter&display=swap");
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
+:root {
+    --input-focus: #2d8cf0;
+    --font-color: #323232;
+    --font-color-sub: #666;
+    --bg-color: #fff;
+    --bg-color-alt: #666;
+    --main-color: #323232;
+    --page-background: #f4f4f2;
 }
 
-html {
-  min-width: 20rem;
-  min-height: 100%;
-  color-scheme: var(--color-scheme);
-  background: var(--color-background);
-  font-family: var(--font-body);
-  font-size: 100%;
+:root[data-theme="dark"] {
+    --input-focus: #4d9cf6;
+    --font-color: #ededed;
+    --font-color-sub: #a3a3a3;
+    --bg-color: #1c1c1c;
+    --bg-color-alt: #a3a3a3;
+    --main-color: #ededed;
+    --page-background: #121212;
+}
+
+:root[data-theme="blue"] {
+    --input-focus: #5b9cff;
+    --font-color: #e8eef7;
+    --font-color-sub: #8d9aae;
+
+    --bg-color: #161c25;
+    --bg-color-alt: #293241;
+
+    --main-color: #5b9cff;
+    --page-background: #0d1219;
+
+    --blue-light: #8ab8ff;
+    --blue-soft: #263a55;
+    --blue: #5b9cff;
+    --blue-dark: #3977d6;
+
+    --border-color: #283342;
+    --card-background: #151b23;
+    --input-background: #1d2632;
+}
+
+:root[data-theme="pink"] {
+    --input-focus: #e88ca8;
+    --font-color: #3f3035;
+    --font-color-sub: #806b73;
+    --bg-color: #fffafa;
+    --bg-color-alt: #b98797;
+    --main-color: #d96b8a;
+    --page-background: #fff0f3;
+
+    --pink-light: #fff0f3;
+    --pink-soft: #f9d8e1;
+    --pink: #e8a0b5;
+    --pink-dark: #d96b8a;
+    --pink-deep: #b94f70;
+    --border-color: #efc4d0;
+}
+
+* {
+    box-sizing: border-box;
 }
 
 body {
-  min-width: 20rem;
-  min-height: 100vh;
-  margin: 0;
-  background:
-    radial-gradient(circle at 88% -10%, var(--body-glow-a), transparent 28rem),
-    radial-gradient(circle at -10% 90%, var(--body-glow-b), transparent 24rem),
-    var(--color-background);
-  color: var(--color-text);
-  font-size: 1rem;
-  line-height: 1.5;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
+    transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-body::before {
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background-image: linear-gradient(var(--body-grid) 1px, transparent 1px), linear-gradient(90deg, var(--body-grid) 1px, transparent 1px);
-  background-size: 4rem 4rem;
-  mask-image: linear-gradient(to bottom, black, transparent 70%);
-  content: '';
+html {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    min-height: 100%;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    min-height: 100vh;
+    min-height: 100dvh;
+
+    background: var(--page-background);
+
+    color: var(--font-color);
+
+    font-family: "Hedvig Letters Sans", sans-serif;
+    overflow-wrap: break-word;
+    -webkit-font-smoothing: antialiased;
 }
 
 button,
 input,
 textarea,
 select {
-  font: inherit;
+    font: inherit;
 }
 
-button,
+input,
+textarea,
+select {
+    font-size: max(16px, 1em);
+}
+
+@media (min-width: 1025px) {
+    input,
+    textarea,
+    select {
+        font-size: inherit;
+    }
+}
+
+button {
+    cursor: pointer;
+}
+
 a {
-  -webkit-tap-highlight-color: transparent;
+    color: inherit;
+    text-decoration: none;
 }
 
-button:disabled { cursor: not-allowed; opacity: .55; }
-h1, h2, h3, p { overflow-wrap: anywhere; }
-textarea { resize: vertical; }
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+img {
+    max-width: 100%;
+    display: block;
 }
-
-button:focus-visible,
-a:focus-visible,
-input:focus-visible,
-textarea:focus-visible,
-select:focus-visible {
-  outline: 2px solid var(--color-violet);
-  outline-offset: 2px;
-  box-shadow: var(--focus-ring);
+html,
+body {
+    max-width: 100%;
+    overflow-x: clip;
 }
 
 img,
+video,
+canvas,
 svg {
-  display: block;
-  max-width: 100%;
+    max-width: 100%;
+    height: auto;
 }
 
-#app {
-  min-height: 100vh;
+input,
+textarea,
+select,
+button {
+    max-width: 100%;
 }
 
-.visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
+@media (max-width: 1024px) {
+    body {
+        font-size: 15px;
+    }
 }
 
-/* Reusable helpers for upcoming Orbit components. */
-.orbit-surface {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-medium);
-  box-shadow: var(--shadow-card);
+@media (max-width: 800px) {
+    body {
+        font-size: 14px;
+    }
 }
 
-.orbit-meta {
-  color: var(--color-text-faint);
-  font-family: var(--font-meta);
-  font-size: 0.875rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+@media (max-width: 520px) {
+    body {
+        font-size: 13px;
+    }
 }
 
-.orbit-touch-target {
-  min-width: var(--touch-target);
-  min-height: var(--touch-target);
+pre,
+table {
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+@media (hover: none) and (pointer: coarse) {
+    button,
+    [role="button"],
+    select {
+        min-height: 36px;
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    scroll-behavior: auto !important;
-    transition-duration: 0.01ms !important;
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-  }
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
 }

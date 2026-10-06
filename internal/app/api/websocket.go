@@ -1,236 +1,465 @@
 package api
 
 import (
-	"bytes"
-	"database/sql"
 	"encoding/json"
-	"errors"
+	"fmt"
 	"io"
 	"log"
-	"net"
-	"net/http"
-	"net/url"
-	"os"
-	"strings"
-
-	chatsdb "social/database/chats"
+	"social/database/chats"
+	"social/database/posts"
+	"social/database/preferences"
+	"social/database/users"
 	"social/internal/helpers"
 	"social/internal/models"
-	"social/internal/realtime"
+	"strings"
 
-	"github.com/gorilla/websocket"
+	"golang.org/x/net/websocket"
 )
 
-type incomingRealtimeEvent struct {
-	Type    string `json:"type"`
-	ChatID  int64  `json:"chat_id"`
-	Content string `json:"content"`
-}
-
-type realtimeEvent struct {
-	Type         string               `json:"type"`
-	Message      *models.ChatMessage  `json:"message,omitempty"`
-	Notification *models.Notification `json:"notification,omitempty"`
-	Code         string               `json:"code,omitempty"`
-}
-
-type realtimeTypingEvent struct {
-	Type   string `json:"type"`
-	ChatID int64  `json:"chatId"`
-	UserID int    `json:"userId"`
-}
-
-type realtimeErrorEvent struct {
-	Type    string `json:"type"`
-	Code    string `json:"code"`
-	Message string `json:"message"`
-}
-
-var websocketUpgrader = websocket.Upgrader{
-	CheckOrigin: websocketOriginAllowed,
-}
-
-func (app *App) WsHandler(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value("userID").(int)
+func (app *App) HandleWS(ws *websocket.Conn) {
+	userID, ok := ws.Request().Context().Value("userID").(int)
 	if !ok {
-		helpers.WriteJson(w, http.StatusUnauthorized, map[string]any{
-			"status":  false,
-			"message": "authentication required",
+		log.Println("invalid user ID")
+		return
+	}
+
+	app.register(userID, ws)
+	defer app.unregister(userID)
+
+	app.readLoop(userID, ws)
+}
+
+func (app *App) readLoop(userID int, ws *websocket.Conn) {
+	for {
+		var rawMessage string
+
+		err := websocket.Message.Receive(ws, &rawMessage)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+
+			log.Println("websocket read error:", err)
+			break
+		}
+
+		var payload models.WSPayload
+
+		if err := json.Unmarshal([]byte(rawMessage), &payload); err != nil {
+			log.Println("invalid websocket payload:", err)
+			continue
+		}
+
+		switch payload.Type {
+		case "privateMessage":
+			app.handleMessage(userID, payload.Data, "message")
+
+		case "notification":
+			log.Println("notification received")
+
+		case "postGroup":
+			app.handleMessage(userID, payload.Data, "postGroup")
+		case "share-profile":
+
+		default:
+			log.Println("unknown websocket type:", payload.Type)
+		}
+	}
+}
+
+func (app *App) sendNotification(userID int, targetID int, data models.NewNotification, notificationID int, unread int) {
+	userData, err := users.GetUserSimpleData(app.DB, userID)
+
+	if err != nil {
+		errMsg := map[string]any{
+			"type":    "notification",
+			"error":   true,
+			"message": "could not send notification",
+		}
+
+		payload, err := json.Marshal(errMsg)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+
+		app.H.Mu.Lock()
+		conn := app.H.Conn[userID]
+		app.H.Mu.Unlock()
+
+		if conn != nil {
+			if _, err := conn.Write(payload); err != nil {
+				log.Println(err)
+			}
+		}
+
+		return
+	}
+
+	msgWord := helpers.GetNotificationType(data)
+
+	name := userData.UserName
+
+	if name == "" {
+		name = strings.TrimSpace(userData.FirstName + " " + userData.LastName)
+	}
+
+	message := data.Message
+
+	if message == "" {
+		message = fmt.Sprintf("new %s from %s", msgWord, name)
+	}
+
+	kind := msgWord
+
+	if data.FollowRequestUserID != nil {
+		kind = "follow_request"
+	}
+
+	msg := map[string]any{
+		"type":    "notification",
+		"error":   false,
+		"message": message,
+		"id":      notificationID,
+		"kind":    kind,
+		"actor": map[string]any{
+			"id":         userData.ID,
+			"firstName":  userData.FirstName,
+			"lastName":   userData.LastName,
+			"avatarPath": userData.Avatar,
+		},
+	}
+
+	if unread >= 0 {
+		msg["unread"] = unread
+	}
+
+	if data.GroupID != nil {
+		msg["group_id"] = *data.GroupID
+	}
+
+	if data.PostIDTag != nil {
+		msg["post_id"] = *data.PostIDTag
+
+		if imagePath, err := posts.GetPostImage(app.DB, *data.PostIDTag); err == nil && imagePath != "" {
+			msg["image_path"] = imagePath
+		}
+	}
+
+	msgPayload, err := json.Marshal(msg)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	app.H.Mu.Lock()
+	conn := app.H.Conn[targetID]
+	app.H.Mu.Unlock()
+
+	if conn != nil {
+		if _, err := conn.Write(msgPayload); err != nil {
+			log.Println(err)
+		}
+	}
+}
+
+func (app *App) handleMessage(userID int, data json.RawMessage, Type string) {
+	var msg models.IncomingMessage
+
+	if Type == "postGroup" {
+		var postMessage models.PostMessage
+
+		if err := json.Unmarshal(data, &postMessage); err != nil {
+			log.Println("invalid post message payload:", err)
+			return
+		}
+
+		if postMessage.GroupID <= 0 {
+			log.Println("invalid group ID:", postMessage.GroupID)
+			return
+		}
+
+		content, err := json.Marshal(postMessage)
+		if err != nil {
+			log.Println("marshal post message error:", err)
+			return
+		}
+
+		groupID := postMessage.GroupID
+
+		if err := chats.AddMessages(
+			app.DB,
+			string(content),
+			userID,
+			groupID,
+		); err != nil {
+			log.Println("add post message error:", err)
+			return
+		}
+
+		sender, err := users.GetUserSimpleData(app.DB, userID)
+		if err != nil {
+			log.Println("get sender error:", err)
+			return
+		}
+
+		message := models.Message{
+			Content: string(content),
+			Sender: models.UserRegistration{
+				ID:        userID,
+				FirstName: sender.FirstName,
+				LastName:  sender.LastName,
+				Avatar:    sender.Avatar,
+			},
+			GroupID: groupID,
+		}
+
+		app.sendToUsers(message, groupID, userID)
+
+		return
+	}
+
+	if err := json.Unmarshal(data, &msg); err != nil {
+		log.Println("invalid message payload:", err)
+		return
+	}
+
+	if msg.Content == "" {
+		return
+	}
+
+	groupID := msg.GroupID
+
+	if groupID <= 0 {
+		if msg.UserID <= 0 || msg.UserID == userID {
+			app.sendMessageError(userID, msg.ClientID, "invalid user")
+			return
+		}
+
+		canMessage, err := chats.CanSendMessage(app.DB, userID, msg.UserID)
+		if err != nil {
+			log.Println("message permission check error:", err)
+			app.sendMessageError(userID, msg.ClientID, "could not verify message permission")
+			return
+		}
+
+		if !canMessage {
+			app.sendMessageError(userID, msg.ClientID, "could not send message because of user preference")
+			return
+		}
+
+		existingGroupID, err := chats.HasPrivateChat(
+			app.DB,
+			userID,
+			msg.UserID,
+		)
+
+		if err != nil {
+			log.Println("private chat lookup error:", err)
+			app.sendMessageError(userID, msg.ClientID, "could not verify chat")
+			return
+		}
+
+		if existingGroupID != -1 {
+			groupID = existingGroupID
+		} else {
+			groupID, err = chats.MakePrivateChat(
+				app.DB,
+				userID,
+				msg.UserID,
+			)
+
+			if err != nil {
+				log.Println("private chat creation error:", err)
+				app.sendMessageError(userID, msg.ClientID, "could not create chat")
+				return
+			}
+		}
+	} else {
+		inGroup, err := chats.UserInGroup(app.DB, userID, groupID)
+		if err != nil || !inGroup {
+			app.sendMessageError(userID, msg.ClientID, "you are not a member of this chat")
+			return
+		}
+
+		isPrivate, targetID, err := chats.IsPrivateChat(app.DB, groupID, userID)
+		if err != nil {
+			log.Println("chat lookup error:", err)
+			app.sendMessageError(userID, msg.ClientID, "could not verify chat")
+			return
+		}
+
+		if isPrivate {
+			canMessage, err := chats.CanSendMessage(app.DB, userID, targetID)
+			if err != nil {
+				log.Println("message permission check error:", err)
+				app.sendMessageError(userID, msg.ClientID, "could not verify message permission")
+				return
+			}
+
+			if !canMessage {
+				app.sendMessageError(userID, msg.ClientID, "could not send message because of user preference")
+				return
+			}
+		}
+	}
+
+	if err := chats.AddMessages(
+		app.DB,
+		msg.Content,
+		userID,
+		groupID,
+	); err != nil {
+		log.Println("add message error:", err)
+		app.sendMessageError(userID, msg.ClientID, "could not send message")
+		return
+	}
+
+	sender, err := users.GetUserSimpleData(app.DB, userID)
+	if err != nil {
+		log.Println("get sender error:", err)
+		return
+	}
+
+	message := models.Message{
+		Content: msg.Content,
+		Sender: models.UserRegistration{
+			ID:        userID,
+			FirstName: sender.FirstName,
+			LastName:  sender.LastName,
+			Avatar:    sender.Avatar,
+		},
+		GroupID: groupID,
+	}
+
+	app.sendToUsers(message, groupID, userID)
+
+	if msg.GroupID > 0 {
+		app.notifyChatMentions(userID, groupID, msg.Content)
+	}
+}
+
+func (app *App) sendToUsers(msg models.Message, groupID int, userID int, forceSilent ...bool,) {
+	silentOnly := len(forceSilent) > 0 && forceSilent[0]
+
+	log.Println(groupID)
+	ids, err := chats.GetGroupMembersIds(
+		app.DB,
+		groupID,
+	)
+
+	if err != nil {
+		log.Println("get group members error:", err)
+		return
+	}
+
+	isPrivate, groupName, err := chats.GetChatMeta(app.DB, groupID)
+
+	if err != nil {
+		log.Println("get chat meta error:", err)
+		return
+	}
+
+	buildResponse := func(silent bool) ([]byte, error) {
+		return json.Marshal(map[string]any{
+			"type":      "message",
+			"data":      msg,
+			"isPrivate": isPrivate,
+			"groupName": groupName,
+			"silent":    silent,
 		})
-		return
-	}
-	if app.Realtime == nil {
-		helpers.WriteJson(w, http.StatusServiceUnavailable, map[string]any{
-			"status":  false,
-			"message": "realtime service unavailable",
-		})
-		return
 	}
 
-	conn, err := websocketUpgrader.Upgrade(w, r, nil)
+	response, err := buildResponse(false)
+
 	if err != nil {
+		log.Println("marshal websocket response error:", err)
 		return
 	}
 
-	client := app.Realtime.Register(userID, conn)
-	client.ReadPump(func(payload []byte) {
-		app.handleRealtimeEvent(client, payload)
-	})
-}
+	silentResponse, err := buildResponse(true)
 
-func (app *App) handleRealtimeEvent(client *realtime.Client, payload []byte) {
-	var event incomingRealtimeEvent
-	decoder := json.NewDecoder(bytes.NewReader(payload))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&event); err != nil {
-		app.sendRealtimeError(client, "invalid_event", "Invalid realtime event.")
-		return
-	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		app.sendRealtimeError(client, "invalid_event", "Invalid realtime event.")
-		return
-	}
-
-	if event.ChatID <= 0 {
-		app.sendRealtimeError(client, "invalid_chat", "A valid chat is required.")
-		return
-	}
-
-	switch event.Type {
-	case "message":
-		app.handleRealtimeMessage(client, event)
-	case "typing_start", "typing_stop":
-		app.handleRealtimeTyping(client, event)
-	default:
-		app.sendRealtimeError(client, "unsupported_type", "Unsupported realtime event type.")
-	}
-}
-
-func (app *App) handleRealtimeMessage(client *realtime.Client, event incomingRealtimeEvent) {
-	message, err := chatsdb.SendMessage(app.DB, event.ChatID, client.UserID, event.Content)
 	if err != nil {
-		code, safeMessage := realtimeChatError(err)
-		app.sendRealtimeError(client, code, safeMessage)
+		log.Println("marshal websocket response error:", err)
 		return
 	}
 
-	// tell the receivers if this is a private or a group chat (and which group)
-	var groupID sql.NullInt64
-	var groupTitle sql.NullString
-	if err := app.DB.QueryRow(`
-		SELECT c.type, c.group_id, g.title
-		FROM chats c
-		LEFT JOIN groups g ON g.id = c.group_id
-		WHERE c.id = ?
-	`, event.ChatID).Scan(&message.ChatType, &groupID, &groupTitle); err != nil {
-		log.Printf("load realtime chat details: %v", err)
-	}
-	message.GroupID = groupID.Int64
-	message.GroupTitle = groupTitle.String
+	for _, id := range ids {
+		if id == userID {
+			continue
+		}
 
-	participants, err := chatsdb.GetChatParticipants(app.DB, event.ChatID)
-	if err != nil {
-		log.Printf("load realtime chat participants: %v", err)
-		app.sendRealtimeError(client, "delivery_failed", "Message saved but realtime delivery failed.")
-		return
-	}
+		payload := response
 
-	err = app.Realtime.SendToUsers(participants, func(recipientID int) any {
-		outgoing := message
-		outgoing.IsOwn = int64(recipientID) == outgoing.SenderID
-		return realtimeEvent{Type: "message", Message: &outgoing}
-	})
-	if err != nil {
-		log.Printf("marshal realtime message: %v", err)
-	}
+		if silentOnly {
+			payload = silentResponse
+		} else {
+			allowed, err := preferences.ShouldNotify(app.DB, id, userID, "message")
 
-	app.notifyPrivateMessage(event.ChatID, client.UserID, message)
-}
+			if err != nil {
+				log.Println("failed to check message notification preference:", err)
+			} else if !allowed {
+				payload = silentResponse
+			}
+		}
 
-func (app *App) handleRealtimeTyping(client *realtime.Client, event incomingRealtimeEvent) {
-	participants, err := chatsdb.GetAuthorizedChatParticipants(app.DB, event.ChatID, client.UserID)
-	if err != nil {
-		code, safeMessage := realtimeChatError(err)
-		app.sendRealtimeError(client, code, safeMessage)
-		return
-	}
+		app.H.Mu.RLock()
+		client, ok := app.H.Conn[id]
+		app.H.Mu.RUnlock()
 
-	recipients := make([]int, 0, len(participants))
-	for _, participantID := range participants {
-		if participantID != client.UserID {
-			recipients = append(recipients, participantID)
+		if !ok {
+			continue
+		}
+
+		if _, err := client.Write(payload); err != nil {
+			log.Println("websocket write error:", err)
 		}
 	}
+}
 
-	err = app.Realtime.SendToUsers(recipients, func(int) any {
-		return realtimeTypingEvent{
-			Type:   event.Type,
-			ChatID: event.ChatID,
-			UserID: client.UserID,
-		}
+func (app *App) register(userID int, ws *websocket.Conn) {
+	app.H.Mu.Lock()
+	defer app.H.Mu.Unlock()
+
+	app.H.Conn[userID] = ws
+}
+
+func (app *App) unregister(userID int) {
+	app.H.Mu.Lock()
+	defer app.H.Mu.Unlock()
+
+	delete(app.H.Conn, userID)
+}
+
+func (app *App) sendMessageError(userID int, clientID string, message string) {
+	response, err := json.Marshal(map[string]any{
+		"type": "notification",
+		"data": map[string]any{
+			"error":    true,
+			"clientID": clientID,
+			"message":  message,
+		},
 	})
+
 	if err != nil {
-		log.Printf("marshal realtime typing event: %v", err)
+		log.Println("marshal notification error:", err)
+		return
+	}
+
+	app.H.Mu.RLock()
+	conn, ok := app.H.Conn[userID]
+	app.H.Mu.RUnlock()
+
+	if !ok {
+		log.Println("user websocket connection not found:", userID)
+		return
+	}
+
+	if _, err := conn.Write(response); err != nil {
+		log.Println("websocket notification error:", err)
 	}
 }
 
-func (app *App) sendRealtimeError(client *realtime.Client, code, message string) {
-	if err := client.Send(realtimeErrorEvent{
-		Type:    "error",
-		Code:    code,
-		Message: message,
-	}); err != nil {
-		log.Printf("send realtime error: %v", err)
-	}
-}
 
-func realtimeChatError(err error) (string, string) {
-	switch {
-	case errors.Is(err, chatsdb.ErrInvalidMessage):
-		return "message_empty", "Message content is required."
-	case errors.Is(err, chatsdb.ErrMessageTooLong):
-		return "message_too_long", "Message must be 2000 characters or fewer."
-	case errors.Is(err, chatsdb.ErrForbidden), errors.Is(err, chatsdb.ErrNoFollowRelation):
-		return "chat_forbidden", "You do not have access to this chat."
-	case errors.Is(err, chatsdb.ErrChatNotFound):
-		return "chat_not_found", "Chat not found."
-	default:
-		log.Printf("save realtime chat message: %v", err)
-		return "message_failed", "Could not send message."
-	}
-}
 
-func websocketOriginAllowed(r *http.Request) bool {
-	origin := r.Header.Get("Origin")
-	if origin == "" {
-		return true
-	}
 
-	parsed, err := url.Parse(origin)
-	if err != nil {
-		return false
-	}
-
-	for _, allowed := range strings.Split(os.Getenv("ORBIT_ALLOWED_ORIGINS"), ",") {
-		if strings.TrimSpace(allowed) == origin {
-			return true
-		}
-	}
-
-	requestHost := r.Host
-	if strings.EqualFold(parsed.Host, requestHost) {
-		return true
-	}
-
-	originHost, _, originErr := net.SplitHostPort(parsed.Host)
-	requestName, _, requestErr := net.SplitHostPort(requestHost)
-	if originErr == nil && requestErr == nil {
-		return isLoopbackHost(originHost) && isLoopbackHost(requestName)
-	}
-	return false
-}
-
-func isLoopbackHost(host string) bool {
-	ip := net.ParseIP(host)
-	return strings.EqualFold(host, "localhost") || (ip != nil && ip.IsLoopback())
-}
