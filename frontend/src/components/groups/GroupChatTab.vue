@@ -1206,6 +1206,64 @@ watch(
     }
 );
 
+let typingStopTimer = null;
+let lastTypingSent = 0;
+let typingActive = false;
+
+const TYPING_RESEND = 2000;
+const TYPING_IDLE = 3000;
+
+function emitTyping(typing) {
+    sendWS({
+        type: 'typing',
+        data: {
+            userID: 0,
+            groupID: props.groupID,
+            typing
+        }
+    });
+}
+
+function stopTyping() {
+    if (typingStopTimer) {
+        clearTimeout(typingStopTimer);
+        typingStopTimer = null;
+    }
+
+    if (!typingActive) {
+        return;
+    }
+
+    emitTyping(false);
+
+    typingActive = false;
+    lastTypingSent = 0;
+}
+
+function handleTypingInput(value) {
+    if (!value || !value.trim()) {
+        stopTyping();
+        return;
+    }
+
+    typingActive = true;
+
+    const now = Date.now();
+
+    if (now - lastTypingSent >= TYPING_RESEND) {
+        emitTyping(true);
+        lastTypingSent = now;
+    }
+
+    if (typingStopTimer) {
+        clearTimeout(typingStopTimer);
+    }
+
+    typingStopTimer = setTimeout(stopTyping, TYPING_IDLE);
+}
+
+watch(message, handleTypingInput);
+
 onMounted(() => {
     activePage.value =
         'group:' + props.groupID;
@@ -1217,6 +1275,8 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+    stopTyping();
+
     if (activePage.value === 'group:' + props.groupID) {
         activePage.value = null;
     }
@@ -1247,26 +1307,7 @@ onUnmounted(() => {
 
 <template>
     <section class="chat-window">
-        <header v-if="group" class="chat-window-header">
-            <div class="avatar">
-                <img v-if="
-                    group.avatar ||
-                    group.Avatar
-                " :src="`/uploads/${group.avatar ||
-                    group.Avatar
-                    }`
-                    " alt="" />
-            </div>
-
-            <div class="chat-user-info">
-                <strong>
-                    {{
-                        group.name ||
-                        group.Name
-                    }}
-                </strong>
-            </div>
-        </header>
+        
 
         <div ref="messagesContainer" class="messages">
             <div v-if="loadingMore" class="loading-more">
@@ -1362,8 +1403,10 @@ onUnmounted(() => {
                                 <div v-if="
                                     msg.post.imagePath
                                 " class="post-message-image">
-                                    <img :src="`/uploads/${msg.post.imagePath}`
-                                        " alt="" />
+                                    <video v-if="msg.post.imagePath.toLowerCase().endsWith('.mp4')"
+                                        :src="`/uploads/${msg.post.imagePath}#t=0.1`" muted playsinline
+                                        preload="metadata"></video>
+                                    <img v-else :src="`/uploads/${msg.post.imagePath}`" alt="" />
                                 </div>
 
                                 <div class="post-message-footer">
@@ -1855,15 +1898,18 @@ onUnmounted(() => {
     border-top: 1px solid var(--main-color);
 }
 
-.post-message-image img {
+.post-message-image img,
+.post-message-image video {
     display: block;
+    pointer-events: none;
     width: 100%;
     max-height: 160px;
     object-fit: cover;
     transition: transform 0.25s ease;
 }
 
-.post-message:hover .post-message-image img {
+.post-message:hover .post-message-image img,
+.post-message:hover .post-message-image video {
     transform: scale(1.03);
 }
 

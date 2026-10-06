@@ -1,5 +1,6 @@
 import { activePage, openGroupPage } from '@/data/chatState';
 import { addNotification, postImageUrl, avatarUrl } from '@/data/notifications';
+import { setGroupTyping, setTyping } from '@/data/typingState';
 import {
     handleIncomingNotification,
     incrementUnreadNotificationCount,
@@ -161,10 +162,56 @@ export function connectToWS() {
                 handleIncomingNotification(payload.data);
                 break;
 
+            case 'groupRemoved':
+                window.dispatchEvent(
+                    new CustomEvent('group-removed', {
+                        detail: payload
+                    })
+                );
+
+                break;
+
+            case 'typing': {
+                const typingData = payload.data || {};
+
+                if (typingData.isGroup) {
+                    setGroupTyping(
+                        typingData.groupID,
+                        typingData.userID,
+                        Boolean(typingData.typing)
+                    );
+                } else {
+                    setTyping(typingData.userID, Boolean(typingData.typing));
+                }
+
+                break;
+            }
+
             case 'message': {
                 const message = payload.data;
 
                 const groupID = message.GroupID;
+
+                if (!payload.isPrivate && message.Sender) {
+                    setGroupTyping(groupID, message.Sender.ID, false);
+                }
+
+                if (payload.isPrivate && message.Sender) {
+                    setTyping(message.Sender.ID, false);
+
+                    window.dispatchEvent(
+                        new CustomEvent('private-chat-activity', {
+                            detail: {
+                                userID: message.Sender.ID,
+                                groupID: message.GroupID,
+                                firstName: message.Sender.firstName || '',
+                                lastName: message.Sender.lastName || '',
+                                avatar: message.Sender.avatar || '',
+                                own: false
+                            }
+                        })
+                    );
+                }
                 const privateChat =
                     activePage.value === 'chat:' + message.Sender.ID;
 

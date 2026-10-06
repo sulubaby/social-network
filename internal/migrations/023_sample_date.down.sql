@@ -1,0 +1,1 @@
+DELETE FROM user WHERE email LIKE '%@minecraft.com' OR email IN ('dream@hotmail.com', 'max@hotmail.com', 'random@hotmail.com', 'celeste@hotmail.com');
