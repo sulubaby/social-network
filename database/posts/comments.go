@@ -33,12 +33,18 @@ func InsertComment(db *sql.DB, comment models.Comment) (models.Comment, error) {
 	}
 
 	err = db.QueryRow(`
-		SELECT first_name, last_name
-		FROM user
-		WHERE id = ?
+		SELECT
+			u.first_name,
+			u.last_name,
+			COALESCE(p.avatar_path, '')
+		FROM user u
+		LEFT JOIN profile p
+			ON p.user_id = u.id
+		WHERE u.id = ?
 	`, comment.User.ID).Scan(
 		&comment.User.FirstName,
 		&comment.User.LastName,
+		&comment.User.Avatar,
 	)
 
 	if err != nil {
@@ -181,7 +187,7 @@ func GetComments(db *sql.DB, postID, replyTo, limit, offset, userID int, orderBy
 func DeleteComment(db *sql.DB, commentID, userID int) ([]string, error) {
 	imageRows, err := db.Query(`
 		WITH RECURSIVE tree(id) AS (
-			SELECT id FROM comments WHERE id = ? AND user_id = ?
+			SELECT id FROM comments WHERE id = ? AND (user_id = ? OR post_id IN (SELECT id FROM posts WHERE user_id = ?))
 			UNION ALL
 			SELECT c.id FROM comments c JOIN tree t ON c.reply_to = t.id
 		)
@@ -189,7 +195,7 @@ func DeleteComment(db *sql.DB, commentID, userID int) ([]string, error) {
 		WHERE id IN (SELECT id FROM tree)
 		AND image_path IS NOT NULL
 		AND image_path != ''
-	`, commentID, userID)
+	`, commentID, userID, userID)
 
 	if err != nil {
 		return nil, err
@@ -218,8 +224,8 @@ func DeleteComment(db *sql.DB, commentID, userID int) ([]string, error) {
 	result, err := db.Exec(`
 		DELETE FROM comments
 		WHERE id = ?
-		AND user_id = ?
-	`, commentID, userID)
+		AND (user_id = ? OR post_id IN (SELECT id FROM posts WHERE user_id = ?))
+	`, commentID, userID, userID)
 
 	if err != nil {
 		return nil, err

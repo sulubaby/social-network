@@ -25,7 +25,20 @@ export async function searchChats(offset, searchValue) {
         throw new Error(result.message || "coud not get data")
     }
 
-    console.log(result)
+    return result;
+}
+
+export async function getChatSuggestions() {
+    const resp = await fetch(`/api/chats/suggestions`, {
+        method: "GET",
+        credentials: 'include'
+    });
+
+    const result = await resp.json();
+    if (!resp.ok) {
+        throw new Error(result.message || "could not get suggestions")
+    }
+
     return result;
 }
 
@@ -41,7 +54,6 @@ export async function sendMessage(data) {
         throw new Error(result.message || "coud not get data")
     }
 
-    console.log(result)
     return result;
 }
 
@@ -69,6 +81,20 @@ export async function sendChatMedia(file, { userID = -1, groupID = -1 } = {}) {
     }
 
     return result;
+}
+
+export async function checkMessageAbility(targetID) {
+    const resp = await fetch(`/api/chats/ability?targetID=${encodeURIComponent(targetID)}`, {
+        method: "GET",
+        credentials: 'include'
+    });
+
+    const result = await resp.json();
+    if (!resp.ok) {
+        throw new Error(result.message || "could not check message permission")
+    }
+
+    return Boolean(result.canMessage);
 }
 
 export async function getMessages(groupID, offset = 0, userID = 0) {
@@ -120,4 +146,17 @@ export function sendPost(userID = 0, postID = 0, recieverID = 0) {
             recieverID: recieverID
         }
     });
+}
+export async function markChatRead(groupID) {
+    const resp = await fetch('/api/chats/read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ groupID: Number(groupID) })
+    });
+
+    if (!resp.ok) {
+        const result = await resp.json().catch(() => ({}));
+        throw new Error(result.message || 'could not mark chat as read');
+    }
 }

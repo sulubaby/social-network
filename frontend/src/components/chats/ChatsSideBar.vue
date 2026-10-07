@@ -1,6 +1,6 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount, watch } from 'vue';
-import { getPrivateChatsLists, searchChats } from '@/api/chats/chats';
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
+import { getPrivateChatsLists, searchChats, getChatSuggestions } from '@/api/chats/chats';
 import { addNotification } from '@/data/notifications';
 import { chatsSidebarOpen, closeChatsSidebar } from '@/data/chatState';
 import { isUserTyping } from '@/data/typingState';
@@ -15,6 +15,8 @@ const props = defineProps({
 const emit = defineEmits(['select-chat']);
 
 const chats = ref([]);
+const suggestions = ref([]);
+const suggestionsLoaded = ref(false);
 const offset = ref(0);
 const loading = ref(false);
 const hasMore = ref(true);
@@ -62,6 +64,46 @@ function debounce(fn, wait = 300) {
             fn.apply(this, args);
         }, wait);
     };
+}
+
+const showSuggestions = computed(
+    () =>
+        !loading.value &&
+        !searchValue.value &&
+        !chats.value.length &&
+        suggestions.value.length > 0
+);
+
+async function loadSuggestions() {
+    if (suggestionsLoaded.value) {
+        return;
+    }
+
+    suggestionsLoaded.value = true;
+
+    try {
+        const result = await getChatSuggestions();
+
+        suggestions.value = normalizeList(result);
+    } catch (err) {
+        suggestionsLoaded.value = false;
+        console.error(err);
+    }
+}
+
+function selectSuggestion(user) {
+    activeChatId.value = user.UserID;
+
+    emit('select-chat', {
+        UserID: user.UserID,
+        GroupID: null,
+        FirstName: user.FirstName || '',
+        LastName: user.LastName || '',
+        Avatar: user.Avatar || '',
+        canMessage: true
+    });
+
+    closeChatsSidebar();
 }
 
 function normalizeList(result) {
@@ -133,6 +175,14 @@ async function loadChats({ reset = false } = {}) {
 
         offset.value = nextOffset + list.length;
         hasMore.value = normalizeHasMore(result, list);
+
+        if (
+            reset &&
+            !chats.value.length &&
+            !searchValue.value
+        ) {
+            loadSuggestions();
+        }
 
         if (reset && chats.value.length) {
             if (props.targetUserId) {
@@ -311,31 +361,16 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <div
-        class="chat-overlay"
-        :class="{ open: chatsSidebarOpen }"
-        aria-hidden="true"
-        @click="closeChatsSidebar"
-    ></div>
+    <div class="chat-overlay" :class="{ open: chatsSidebarOpen }" aria-hidden="true" @click="closeChatsSidebar"></div>
 
-    <aside
-        id="chat-drawer"
-        class="chat-sidebar"
-        :class="{ open: chatsSidebarOpen }"
-        aria-label="Chats"
-    >
+    <aside id="chat-drawer" class="chat-sidebar" :class="{ open: chatsSidebarOpen }" aria-label="Chats">
         <div class="sidebar-heading">
             <div>
                 <p class="eyebrow">MESSAGES</p>
                 <h2>Chats</h2>
             </div>
 
-            <button
-                type="button"
-                class="sidebar-close"
-                aria-label="Close chats list"
-                @click="closeChatsSidebar"
-            >
+            <button type="button" class="sidebar-close" aria-label="Close chats list" @click="closeChatsSidebar">
                 ×
             </button>
         </div>
@@ -343,43 +378,20 @@ onBeforeUnmount(() => {
         <div class="search">
             <span class="search-icon">⌕</span>
 
-            <input
-                v-model="searchValue"
-                type="text"
-                placeholder="Search chats..."
-                @input="handleSearchInput"
-            />
+            <input v-model="searchValue" type="text" placeholder="Search chats..." @input="handleSearchInput" />
 
-            <button
-                v-if="searchValue"
-                type="button"
-                class="clear-search"
-                @click="searchValue = ''; handleSearchInput()"
-            >
+            <button v-if="searchValue" type="button" class="clear-search"
+                @click="searchValue = ''; handleSearchInput()">
                 ×
             </button>
         </div>
 
-        <div
-            ref="listEl"
-            class="chat-list"
-        >
-            <button
-                v-for="chat in chats"
-                :key="chat.UserID"
-                type="button"
-                class="chat-item"
-                :class="{
-                    active: activeChatId === chat.UserID
-                }"
-                @click="selectChat(chat)"
-            >
+        <div ref="listEl" class="chat-list">
+            <button v-for="chat in chats" :key="chat.UserID" type="button" class="chat-item" :class="{
+                active: activeChatId === chat.UserID
+            }" @click="selectChat(chat)">
                 <div class="avatar">
-                    <img
-                        v-if="chat.Avatar"
-                        :src="`/uploads/${chat.Avatar}`"
-                        alt=""
-                    />
+                    <img v-if="chat.Avatar" :src="`/uploads/${chat.Avatar}`" alt="" />
 
                     <span v-else>
                         {{
@@ -397,10 +409,7 @@ onBeforeUnmount(() => {
                             {{ chat.LastName }}
                         </strong>
 
-                        <span
-                            v-if="chat.UnreadCount"
-                            class="badge"
-                        >
+                        <span v-if="chat.UnreadCount" class="badge">
                             {{
                                 chat.UnreadCount > 99
                                     ? '99+'
@@ -409,47 +418,59 @@ onBeforeUnmount(() => {
                         </span>
                     </div>
 
-                    <p
-                        v-if="isUserTyping(chat.UserID)"
-                        class="preview typing"
-                    >
+                    <p v-if="isUserTyping(chat.UserID)" class="preview typing">
                         typing...
                     </p>
                 </div>
 
-                <span
-                    v-if="chat.LastMessageAt"
-                    class="time"
-                >
+                <span v-if="chat.LastMessageAt" class="time">
                     {{ chat.LastMessageAt }}
                 </span>
 
-                <span
-                    v-if="activeChatId === chat.UserID"
-                    class="active-arrow"
-                >
+                <span v-if="activeChatId === chat.UserID" class="active-arrow">
                     >
                 </span>
             </button>
 
-            <p
-                v-if="loading"
-                class="status-text"
-            >
+            <div v-if="showSuggestions" class="suggestions">
+                <p class="suggestions-title">SUGGESTIONS</p>
+
+                <button v-for="user in suggestions" :key="user.UserID" type="button" class="chat-item"
+                    :class="{ active: activeChatId === user.UserID }" @click="selectSuggestion(user)">
+                    <div class="avatar">
+                        <img v-if="user.Avatar" :src="`/uploads/${user.Avatar}`" alt="" />
+
+                        <span v-else>
+                            {{
+                                (user.FirstName || '?')
+                                    .charAt(0)
+                                    .toUpperCase()
+                            }}
+                        </span>
+                    </div>
+
+                    <div class="chat-info">
+                        <div class="chat-info-top">
+                            <strong>
+                                {{ user.FirstName }}
+                                {{ user.LastName }}
+                            </strong>
+                        </div>
+
+                        <p class="preview">Say hi</p>
+                    </div>
+                </button>
+            </div>
+
+            <p v-if="loading" class="status-text">
                 Loading chats...
             </p>
 
-            <p
-                v-else-if="!chats.length"
-                class="status-text"
-            >
+            <p v-else-if="!chats.length && !showSuggestions" class="status-text">
                 No chats found
             </p>
 
-            <p
-                v-else-if="!hasMore"
-                class="status-text"
-            >
+            <p v-else-if="!hasMore" class="status-text">
                 No more chats
             </p>
         </div>
@@ -734,6 +755,16 @@ h2 {
     line-height: 1;
 }
 
+.suggestions-title {
+    margin: 0;
+    padding: 12px 17px 6px;
+    color: var(--input-focus);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 2px;
+}
+
 .status-text {
     margin: 0;
     padding: 22px 16px;
@@ -814,6 +845,7 @@ h2 {
 }
 
 @media (prefers-reduced-motion: reduce) {
+
     .chat-overlay,
     .chat-sidebar {
         transition: none !important;
