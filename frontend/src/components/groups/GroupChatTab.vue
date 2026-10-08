@@ -5,7 +5,7 @@ import { sendWS } from '@/api/socket/socket';
 import { getMessages, sendChatMedia, markChatRead } from '@/api/chats/chats';
 import { CHAT_MEDIA_ACCEPT, parseChatMedia, validateChatMedia } from '@/helpers/chatMedia';
 import { getGroupPost, insertPostReaction } from '@/api/posts/groups';
-import { activePage } from '@/data/chatState';
+import { activePage, markChatSeen } from '@/data/chatState';
 import HomePosts from '@/components/home/HomePosts.vue';
 import EmojiPicker from '@/components/chats/EmojiPicker.vue';
 import GroupEventDialog from '@/components/groups/GroupEventDialog.vue';
@@ -13,7 +13,7 @@ import GroupEventVotesDialog from '@/components/groups/GroupEventVotesDialog.vue
 import { fetchGroupEvent, respondGroupEvent } from '@/api/groups/events';
 import { searchGroupMentions } from '@/api/groups/mentions';
 import { LIMITS, charCount, cleanText, validateChatMessage } from '@/helpers/limits';
-import { resizeTextarea, resetTextarea, handleEnterKey, enforceLines } from '@/helpers/multilineInput';
+import { resizeTextarea, resetTextarea, enforceLines } from '@/helpers/multilineInput';
 
 const props = defineProps({
     groupID: {
@@ -596,6 +596,10 @@ async function fetchChatMessages(groupID) {
             hasMore.value = false;
         }
 
+        loading.value = false;
+        await nextTick();
+        if (currentRequestID !== requestID) return;
+        markChatSeen('group:' + groupID);
         markChatRead(groupID).catch(console.error);
     } catch (err) {
         if (currentRequestID !== requestID) {
@@ -1155,8 +1159,6 @@ function handleKeydown(event) {
             return;
         }
     }
-
-    handleEnterKey(event, send);
 }
 
 watch(

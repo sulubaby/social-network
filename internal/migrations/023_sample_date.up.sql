@@ -107,7 +107,6 @@ UNION ALL SELECT 'random', 'DO NOT USE THIS', 'posts/r3.mp4'
 UNION ALL SELECT 'gamer', 'before and after farewell', 'posts/celeste1.mp4'
 UNION ALL SELECT 'gamer', 'before and after farewell', 'posts/celeste2.mp4'
 UNION ALL SELECT 'gamer', 'speed running', 'posts/celeste3.mp4'
-UNION ALL SELECT 'gamer', '.........bruh', 'posts/celeste4.mp4'
 ) v
 JOIN user u ON u.username = v.username;
 

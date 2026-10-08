@@ -319,7 +319,7 @@ func GetGroupChats(db *sql.DB, userID, offset int) ([]models.Group, error) {
 			(
 				SELECT COUNT(*)
 				FROM groups_users gu2
-				WHERE gu2.group_id = g.id
+				WHERE gu2.group_id = g.id AND gu2.status = 1
 			),
 			(
 				SELECT COUNT(*)
@@ -479,7 +479,7 @@ func GetGroup(de *sql.DB, userID, groupID int) (models.Group, error) {
 		(
 			SELECT COUNT(*)
 			FROM groups_users gu
-			WHERE gu.group_id = g.id
+			WHERE gu.group_id = g.id AND gu.status = 1
 		) AS member_count
 	FROM groups g
 	WHERE

@@ -1,4 +1,4 @@
-import { activePage, openGroupPage } from '@/data/chatState';
+import { activePage, openGroupPage, recordIncomingChat } from '@/data/chatState';
 import { addNotification, postImageUrl, avatarUrl } from '@/data/notifications';
 import { setGroupTyping, setTyping } from '@/data/typingState';
 import {
@@ -189,6 +189,7 @@ export function connectToWS() {
 
             case 'message': {
                 const message = payload.data;
+                recordIncomingChat(payload);
 
                 const groupID = message.GroupID;
 
@@ -213,10 +214,10 @@ export function connectToWS() {
                     );
                 }
                 const privateChat =
-                    activePage.value === 'chat:' + message.Sender.ID;
+                    payload.isPrivate && activePage.value === 'chat:' + message.Sender.ID;
 
                 const groupChat =
-                    activePage.value === 'group:' + groupID;
+                    !payload.isPrivate && activePage.value === 'group:' + groupID;
 
                 const onGroupPage =
                     !payload.isPrivate &&

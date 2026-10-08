@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { addNotification } from '@/data/notifications';
-import { chatsSidebarOpen, toggleChatsSidebar } from '@/data/chatState';
+import { activePage, chatsSidebarOpen, toggleChatsSidebar, markChatSeen } from '@/data/chatState';
 import { Message } from '@/models/chats';
 import { sendWS } from '@/api/socket/socket';
 import { isUserTyping } from '@/data/typingState';
@@ -11,7 +11,7 @@ import { CHAT_MEDIA_ACCEPT, parseChatMedia, validateChatMedia } from '@/helpers/
 import HomePosts from '../home/HomePosts.vue';
 import EmojiPicker from './EmojiPicker.vue';
 import { LIMITS, charCount, cleanText, validateChatMessage, clampText } from '@/helpers/limits';
-import { resizeTextarea, resetTextarea, handleEnterKey, enforceLines } from '@/helpers/multilineInput';
+import { resizeTextarea, resetTextarea, enforceLines } from '@/helpers/multilineInput';
 
 const props = defineProps({
     chat: {
@@ -53,9 +53,6 @@ function onMessageInput(event) {
     resizeTextarea(messageInput.value);
 }
 
-function onMessageKeydown(event) {
-    handleEnterKey(event, send);
-}
 const messages = ref([]);
 const fileInput = ref(null);
 const pendingFile = ref(null);
@@ -724,6 +721,11 @@ async function fetchChatMessages(groupID) {
         messages.value =
             formattedMessages.reverse();
 
+        loading.value = false;
+        await nextTick();
+        if (currentRequestID !== requestID) return;
+        markChatSeen('chat:' + props.userID);
+
         offset.value = data.length;
 
         if (data.length < 20) {
@@ -1330,6 +1332,9 @@ onMounted(() => {
 
 onUnmounted(() => {
     stopTyping();
+    if (activePage.value === 'chat:' + props.userID) {
+        activePage.value = null;
+    }
 
     window.removeEventListener(
         'chat-message',
@@ -1826,7 +1831,6 @@ onUnmounted(() => {
                         !canMessage
                     "
                     @input="onMessageInput"
-                    @keydown="onMessageKeydown"
                 ></textarea>
 
                 <span

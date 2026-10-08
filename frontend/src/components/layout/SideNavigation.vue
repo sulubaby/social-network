@@ -5,6 +5,7 @@ import { logout } from '@/api/auth/auth';
 import { addNotification } from '@/data/notifications';
 import { unreadNotificationCount, refreshUnreadNotificationCount } from '@/data/notificationCount';
 import { sideNavOpen, closeSideNav } from '@/data/sideNav';
+import { hasUnreadChats } from '@/data/chatState';
 
 const route = useRoute();
 const desktopQuery = window.matchMedia('(min-width: 1025px)');
@@ -97,6 +98,7 @@ async function logoutHandler() {
                 <a href="/chats" :class="{ active: route.path === '/chats' }" @click="closeSideNav">
                     <span class="icon">✉</span>
                     <span class="label">chats</span>
+                    <span v-if="hasUnreadChats" class="badge" role="status" aria-label="Unread messages" title="Unread messages">●</span>
                 </a>
             </nav>
 
