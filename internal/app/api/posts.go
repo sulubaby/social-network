@@ -229,7 +229,7 @@ func (app *App) GetHomePosts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	posts, err := posts.GetHomePosts(app.DB, userID, offset)
+	homePosts, err := posts.GetHomePosts(app.DB, userID, offset)
 
 	if err != nil {
 		log.Println(err)
@@ -240,9 +240,11 @@ func (app *App) GetHomePosts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	posts.FillRelationships(app.DB, userID, homePosts)
+
 	helpers.WriteJson(w, http.StatusOK, map[string]any{
 		"status": true,
-		"posts":  posts,
+		"posts":  homePosts,
 	})
 }
 
@@ -439,6 +441,8 @@ func (app *App) GetUserPosts(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	posts.FillRelationships(app.DB, userID, userPosts)
+
 	helpers.WriteJson(w, http.StatusOK, map[string]any{
 		"status":  true,
 		"data":    userPosts,
@@ -584,6 +588,8 @@ func (app *App) writeTaggedPosts(w http.ResponseWriter, userID, targetID, offset
 		})
 		return
 	}
+
+	posts.FillRelationships(app.DB, userID, visiblePosts)
 
 	helpers.WriteJson(w, http.StatusOK, map[string]any{
 		"status":  true,

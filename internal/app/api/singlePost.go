@@ -8,6 +8,7 @@ import (
 
 	"social/database/posts"
 	"social/internal/helpers"
+	"social/internal/models"
 )
 
 func (app *App) GetSinglePost(w http.ResponseWriter, r *http.Request) {
@@ -55,10 +56,13 @@ func (app *App) GetSinglePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	withRelationship := []models.Post{post}
+	posts.FillRelationships(app.DB, userID, withRelationship)
+
 	helpers.WriteJson(w, http.StatusOK, map[string]any{
 		"status": true,
 		"userId": userID,
-		"data":   post,
+		"data":   withRelationship[0],
 	})
 }
 

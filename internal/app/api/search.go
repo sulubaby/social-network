@@ -36,7 +36,9 @@ func (app *App) GlobalSearchUsers(w http.ResponseWriter, r *http.Request) {
 
 func (app *App) GlobalSearchPosts(w http.ResponseWriter, r *http.Request) {
 	serveSearch(w, r, searchPostsPageSize, func(userID int, search string, limit, offset int) ([]models.Post, error) {
-		return posts.SearchPosts(app.DB, userID, search, limit, offset)
+		found, err := posts.SearchPosts(app.DB, userID, search, limit, offset)
+		posts.FillRelationships(app.DB, userID, found)
+		return found, err
 	})
 }
 

@@ -93,9 +93,10 @@ const props = defineProps({
         type: String,
         default: ''
     },
+    // filled by the server; empty means unknown, then no follow button is shown
     relationship: {
         type: String,
-        default: 'none'
+        default: ''
     },
     visibility: {
         type: String,

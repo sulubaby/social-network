@@ -1,5 +1,7 @@
 <script setup>
-import { computed, ref, onMounted, onBeforeUnmount } from 'vue';
+import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue';
+import { requestFollow } from '@/api/users/profiles';
+import { addNotification } from '@/data/notifications';
 
 const props = defineProps({
     userId: {
@@ -22,9 +24,10 @@ const props = defineProps({
         type: String,
         default: ''
     },
+    // filled by the server; empty means unknown, then no follow button is shown
     relationship: {
         type: String,
-        default: 'none'
+        default: ''
     },
     taggedPeople: {
         type: Array,
@@ -49,6 +52,35 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['open-tags', 'open-location', 'delete']);
+
+// my relationship with the author, it changes right away when i press Follow.
+// "self" (my own post) and "following" show no button
+const followState = ref(props.relationship || '');
+const followBusy = ref(false);
+
+watch(() => props.relationship, value => {
+    followState.value = value || '';
+});
+
+async function followAuthor() {
+    if (followBusy.value || !props.userId) return;
+
+    followBusy.value = true;
+    try {
+        const result = await requestFollow(props.userId, 'POST');
+        if (!result?.status) throw new Error(result?.message || 'Could not follow');
+
+        // 1 = following now (public account), 0 = request sent (private account)
+        followState.value = result.followStatus === 0 ? 'requested' : 'following';
+        addNotification(result.followStatus === 0
+            ? `Follow request sent to ${props.firstName}`
+            : `You are now following ${props.firstName}`);
+    } catch (err) {
+        addNotification(err.message || 'Could not follow', 'error');
+    } finally {
+        followBusy.value = false;
+    }
+}
 const isSelectedUsersPost = computed(() => {
     if (props.groupId === null || props.groupId === undefined || props.groupId === '') {
         return false;
@@ -149,12 +181,19 @@ const relativeTime = computed(() => {
                         {{ firstName }} {{ lastName }}
                     </span>
 
-                    <span v-if="relationship === 'friend'" class="relationship-badge">
+                    <span v-if="followState === 'friend'" class="relationship-badge">
                         Friends
                     </span>
 
-                    <!-- the old "Follow" button here had no action and also showed on my own
-                         posts, following is done from the profile page -->
+                    <!-- follow right from the post (like instagram). private accounts get a request -->
+                    <button v-else-if="followState === 'none'" class="follow-button" type="button"
+                        :disabled="followBusy" @click.stop="followAuthor">
+                        Follow
+                    </button>
+
+                    <span v-else-if="followState === 'requested'" class="relationship-badge">
+                        Requested
+                    </span>
 
                     <span v-if="isSelectedUsersPost" class="visibility-text">
                         Visibility limited by the user
