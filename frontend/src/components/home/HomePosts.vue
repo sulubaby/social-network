@@ -231,8 +231,17 @@ function formatRelativeDate(dateString) {
     const diffHours = diffMs / (1000 * 60 * 60);
     const diffDays = diffHours / 24;
 
+    // under an hour: "just now" or minutes (it used to say "1h ago" right after posting)
+    const diffMinutes = Math.floor(diffMs / (1000 * 60));
+    if (diffMinutes < 1) {
+        return 'just now';
+    }
+    if (diffMinutes < 60) {
+        return `${diffMinutes}m ago`;
+    }
+
     if (diffHours < 24) {
-        const hours = Math.max(1, Math.floor(diffHours));
+        const hours = Math.floor(diffHours);
         return `${hours}h ago`;
     }
 

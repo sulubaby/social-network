@@ -398,7 +398,8 @@ func DiscoverGroups(db *sql.DB, userID, offset int, search string) ([]models.Gro
 			(
 				SELECT COUNT(*)
 				FROM groups_users gu2
-				WHERE gu2.group_id = g.id
+				-- only real members, not pending invites or join requests
+				WHERE gu2.group_id = g.id AND gu2.status = 1
 			) AS members_count
 		FROM groups g
 		WHERE NOT EXISTS (

@@ -7,6 +7,11 @@ const props = defineProps({
     type: {
         type: String,
         default: 'personal'
+    },
+    // the tab to open first, for example "posts" right after making a post
+    initialTab: {
+        type: String,
+        default: 'about'
     }
 });
 
@@ -38,7 +43,7 @@ function selectTab(tab) {
 }
 
 onMounted(() => {
-    selectTab('about');
+    selectTab(tabs.includes(props.initialTab) ? props.initialTab : 'about');
 });
 </script>
 

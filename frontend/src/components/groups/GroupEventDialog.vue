@@ -81,7 +81,9 @@ async function submitEvent() {
             groupId: Number(props.groupId),
             title: eventTitle,
             description: eventDescription,
-            eventTime: eventDate
+            // the picker gives local time without a zone, send it as UTC so
+            // everyone sees the time that was picked (it showed 3 hours off)
+            eventTime: new Date(eventDate).toISOString()
         });
 
         emit('created', created);

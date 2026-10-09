@@ -153,10 +153,8 @@ const relativeTime = computed(() => {
                         Friends
                     </span>
 
-                    <button v-else-if="relationship === 'following' || relationship === 'none'" class="follow-button"
-                        type="button">
-                        Follow
-                    </button>
+                    <!-- the old "Follow" button here had no action and also showed on my own
+                         posts, following is done from the profile page -->
 
                     <span v-if="isSelectedUsersPost" class="visibility-text">
                         Visibility limited by the user

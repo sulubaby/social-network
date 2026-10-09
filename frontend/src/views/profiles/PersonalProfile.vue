@@ -18,7 +18,9 @@ const route = useRoute();
 
 const loading = ref(true);
 const user = ref(null);
-const activeTab = ref('personal');
+// ?tab=posts (after making a post) opens that tab, if not the tab bar opens "about"
+const initialTab = typeof route.query.tab === 'string' ? route.query.tab : 'about';
+const activeTab = ref(initialTab);
 activePage.value = 'personalProfile';
 
 async function getData() {
@@ -34,9 +36,6 @@ async function getData() {
 
 onMounted(() => {
     getData();
-    activeTab.value = ref(
-        route.query.tab === 'posts' ? 'posts' : 'personal'
-    );
 
 });
 </script>
@@ -61,7 +60,7 @@ onMounted(() => {
                         :num-of-posts="user.Profile.numOfPosts" :num-of-following="user.Profile.numOfFollowing"
                         :num-of-followers="user.Profile.numOfFollowers" />
 
-                    <ProfileTabs type="personal" @change-tab="activeTab = $event" />
+                    <ProfileTabs type="personal" :initial-tab="initialTab" @change-tab="activeTab = $event" />
 
                     <AboutTab v-if="activeTab === 'about'" :about="user.Profile.About" :email="user.email" :dob="user.DOB" />
 
