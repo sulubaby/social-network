@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -157,6 +158,15 @@ func (app *App) UpdateUserInfo(w http.ResponseWriter, r *http.Request) {
 		userData.Password = hashedPassword
 	}
 
+	// people waiting on my follow requests, they get accepted if i go public
+	var waiting []int
+	if userData.IsPrivate == 0 {
+		var err error
+		if waiting, err = users.PendingFollowRequests(app.DB, userID); err != nil {
+			log.Println(err)
+		}
+	}
+
 	if err := users.UpdateUserInfo(app.DB, userID, &userData); err != nil {
 		_, message := helpers.NormalizeSQLError(err)
 		helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
@@ -164,6 +174,16 @@ func (app *App) UpdateUserInfo(w http.ResponseWriter, r *http.Request) {
 			"message": message,
 		})
 		return
+	}
+
+	// going public accepted them (database trigger), tell each of them
+	for _, followerID := range waiting {
+		requesterID := followerID
+		app.notify(userID, models.NewNotification{
+			UserID:                    requesterID,
+			Message:                   fmt.Sprintf("%s accepted your follow request", app.actorName(userID)),
+			FollowRequestAcceptUserID: &userID,
+		})
 	}
 
 	helpers.WriteJson(w, http.StatusOK, map[string]any{

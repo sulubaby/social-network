@@ -134,27 +134,66 @@ func GetUserData(db *sql.DB, userID int) (models.UserData, error) {
 		userData.IsPrivate = 0
 	}
 
+	// the frontend reads the id and the privacy from UserInfo (edit profile,
+	// "is this my post" checks...), so fill them there too
+	userData.UserInfo.ID = userID
+	userData.UserInfo.IsPrivate = userData.IsPrivate
+
 	return userData, nil
 }
 
 func UpdateUserInfo(db *sql.DB, userID int, userData *models.UserRegistration) error {
-	_, err := db.Exec(`
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec(`
 		UPDATE user
 		SET first_name = ?, last_name = ?, email = ?, username = ?
 		WHERE id = ?
 	`, userData.FirstName, userData.LastName, userData.Email, userData.UserName, userID)
-
 	if err != nil {
 		return err
 	}
 
-	_, err = db.Exec(`
+	// the password only changes when a new one was typed (it is already hashed here)
+	if userData.Password != "" {
+		if _, err = tx.Exec(`UPDATE user SET password = ? WHERE id = ?`, userData.Password, userID); err != nil {
+			return err
+		}
+	}
+
+	_, err = tx.Exec(`
 		UPDATE profile
 		SET about = ?, is_private = ?
 		WHERE user_id = ?
 	`, userData.About, userData.IsPrivate, userID)
+	if err != nil {
+		return err
+	}
 
-	return err
+	return tx.Commit()
+}
+
+// PendingFollowRequests gives the people still waiting for this user to accept them
+func PendingFollowRequests(db *sql.DB, userID int) ([]int, error) {
+	rows, err := db.Query(`SELECT follower_id FROM user_followers WHERE target_id = ? AND status = 0`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []int
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 func UpdateUserAvatar(db *sql.DB, userID int, avatar_path string) error {

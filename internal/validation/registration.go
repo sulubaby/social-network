@@ -176,7 +176,8 @@ func validateAbout(about *string) error {
 }
 
 func ValidateLogin(identifier string, password string) (string, error) {
-	identifier = strings.TrimSpace(identifier)
+	// usernames and emails are saved in lower case, so the login is not case sensitive
+	identifier = strings.ToLower(strings.TrimSpace(identifier))
 
 	if err := ValidateSingleLine("identifier", identifier, 3, MaxIdentifier); err != nil {
 		return "", err
