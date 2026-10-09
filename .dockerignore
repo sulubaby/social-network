@@ -1,0 +1,10 @@
+# never send these to docker build (local database, uploads, node modules, git data)
+.git
+db
+uploads
+frontend
+node_modules
+output
+lessons
+*.md
+.playwright-cli

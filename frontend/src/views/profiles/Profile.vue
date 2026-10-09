@@ -6,13 +6,13 @@ import BackToHome from '@/components/layout/BackToHome.vue';
 import ProfileHeader from '@/components/personalProfile/ProfileHeader.vue';
 import ProfileTabs from '@/components/personalProfile/ProfileTabs.vue';
 import PrivateProfileIcon from '@/components/ProfileEdit/PrivateProfileIcon.vue';
-import AboutTab from '@/components/profile/AboutTab.vue';
+import AboutTab from '@/components/Profile/AboutTab.vue';
 import { getProfileData } from '@/api/users/profiles';
 import { useRoute } from 'vue-router';
-import FollowersTab from '@/components/profile/FollowersTab.vue';
+import FollowersTab from '@/components/Profile/FollowersTab.vue';
 import { addNotification } from '@/data/notifications';
 import { getFriends } from '@/api/common/friends';
-import ProfilePostsTab from '@/components/profile/posts/ProfilePostsTab.vue';
+import ProfilePostsTab from '@/components/Profile/posts/ProfilePostsTab.vue';
 import { activePage } from '@/data/chatState';
 
 const route = useRoute();

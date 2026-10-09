@@ -6,7 +6,7 @@ import AvatarPicker from '@/components/groups/AvatarPicker.vue';
 import AddMembers from '@/components/groups/AddMembers.vue';
 
 import { addNotification } from '@/data/notifications';
-import { createGroup } from '@/api/groups/groups';
+import { createGroup } from '@/api/groups/Groups';
 
 defineProps({
     show: {

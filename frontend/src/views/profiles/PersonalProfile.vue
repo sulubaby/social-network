@@ -7,11 +7,11 @@ import TopNavigation from '@/components/layout/TopNavigation.vue';
 import BackToHome from '@/components/layout/BackToHome.vue';
 import ProfileHeader from '@/components/personalProfile/ProfileHeader.vue';
 import ProfileTabs from '@/components/personalProfile/ProfileTabs.vue';
-import AboutTab from '@/components/profile/AboutTab.vue';
-import FollowersTab from '@/components/profile/FollowersTab.vue';
+import AboutTab from '@/components/Profile/AboutTab.vue';
+import FollowersTab from '@/components/Profile/FollowersTab.vue';
 import GroupTab from '@/components/personalProfile/group/GroupTab.vue';
 import { addNotification } from '@/data/notifications';
-import ProfilePostsTab from '@/components/profile/posts/ProfilePostsTab.vue';
+import ProfilePostsTab from '@/components/Profile/posts/ProfilePostsTab.vue';
 import { activePage } from '@/data/chatState';
 
 const route = useRoute();

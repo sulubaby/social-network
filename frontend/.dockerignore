@@ -1,0 +1,6 @@
+# the image installs its own linux node_modules, a windows copy would break the build
+node_modules
+dist
+output
+tests
+.vscode

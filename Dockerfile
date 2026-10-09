@@ -28,7 +28,6 @@ COPY --from=builder /out/migrate /usr/local/bin/migrate
 COPY internal/migrations ./internal/migrations
 COPY images ./images
 
-COPY uploads ./uploads
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN sed -i 's/\r$//' /usr/local/bin/docker-entrypoint.sh \

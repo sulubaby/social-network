@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router';
 import Groupssearch from './Groupssearch.vue';
 import GroupRequestsDialog from './GroupRequestsDialog.vue';
 import { searchInvites } from '@/api/chats/search';
-import { kickMember, leaveGroup } from '@/api/groups/groups';
+import { kickMember, leaveGroup } from '@/api/groups/Groups';
 
 const props = defineProps({
     show: {
