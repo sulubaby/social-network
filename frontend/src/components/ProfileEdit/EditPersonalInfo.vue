@@ -54,14 +54,22 @@ function validateForm() {
     return !Object.values(errors).some(Boolean);
 }
 
-function togglePrivacy() {
-    form.IsPrivate = !form.IsPrivate;
+// the switch saves right away. before, it only changed the label and the
+// account stayed public/private until "Confirm changes" was pressed
+async function togglePrivacy() {
+    const previous = form.IsPrivate;
+    form.IsPrivate = previous ? 0 : 1;
+
+    const saved = await updateInfo();
+    if (!saved) {
+        form.IsPrivate = previous;
+    }
 }
 
 async function updateInfo() {
     if (!validateForm()) {
         addNotification('Please fix the highlighted fields', 'error')
-        return;
+        return false;
     }
 
     if (form.IsPrivate) {
@@ -73,13 +81,14 @@ async function updateInfo() {
         const result = await updateUserInfo(form);
         if (!result.status) {
             addNotification(result.message, 'error')
-            return;
+            return false;
         }
         addNotification(result.message, 'success')
+        return true;
     } catch (err) {
         addNotification(err.message, 'error')
+        return false;
     }
-
 }
 </script>
 

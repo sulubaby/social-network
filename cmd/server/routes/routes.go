@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"strings"
 	"os"
 	"database/sql"
 	"log"
@@ -62,7 +63,16 @@ func StartServer(db *sql.DB) *http.ServeMux {
 	mux.HandleFunc("/api/follow/accept", app.AuthMiddleware(app.AcceptFollowRequest))
 	mux.HandleFunc("POST /api/follow/reject", app.AuthMiddleware(app.RejectFollowRequest))
 
-	mux.Handle("/uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir(uploadsDir))))
+	// pictures and videos are only for signed in users, and folders are never listed
+	// (before, /uploads/posts/ showed the name of every uploaded file)
+	fileServer := http.StripPrefix("/uploads/", http.FileServer(http.Dir(uploadsDir)))
+	mux.HandleFunc("/uploads/", app.AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/") {
+			http.NotFound(w, r)
+			return
+		}
+		fileServer.ServeHTTP(w, r)
+	}))
 
 	mux.HandleFunc("GET /api/friends/", app.AuthMiddleware(app.GetFriends))
 	mux.HandleFunc("POST /api/post", app.AuthMiddleware(app.AddPost))

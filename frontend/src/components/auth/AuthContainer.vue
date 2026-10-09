@@ -893,6 +893,9 @@ async function loggUser(event) {
 .flip-card__back {
     transform: rotateY(180deg);
     overflow-y: auto;
+    /* the sign up form is taller than the card: plain "center" pushed the
+       title above the top edge where it could not be scrolled to */
+    justify-content: safe center;
 }
 
 .title {

@@ -6,7 +6,7 @@
             <div class="logo">N</div>
 
             <p class="eyebrow">
-                WELCOME BACK
+                WELCOME
             </p>
 
             <h1>

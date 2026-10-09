@@ -113,6 +113,14 @@ func (app *App) AuthorizeSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *App) DeleteSession(w http.ResponseWriter, r *http.Request) {
+	// remember the token as logged out, so a copy of the cookie stops working too
+	if cookie, err := r.Cookie("token"); err == nil && cookie.Value != "" {
+		if payload, verifyErr := tokens.VerifyToken(cookie.Value); verifyErr == nil {
+			if err := users.RevokeToken(app.DB, cookie.Value, payload.Exp); err != nil {
+				log.Println("could not revoke token:", err)
+			}
+		}
+	}
 
 	http.SetCookie(w, &http.Cookie{
 		Name:   "token",

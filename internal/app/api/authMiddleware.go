@@ -36,6 +36,17 @@ func (app *App) AuthMiddleware(handler http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
+		// a logged out token is not accepted anymore
+		if revoked, revokeErr := users.IsTokenRevoked(app.DB, cookie.Value); revokeErr != nil || revoked {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]any{
+				"status":  false,
+				"message": "invalid or expired session",
+			})
+			return
+		}
+
 		err = users.UserExists(app.DB, payload.UserID)
 		if err == sql.ErrNoRows {
 			w.Header().Set("Content-Type", "application/json")
@@ -75,6 +86,12 @@ func (app *App) WSAuthMiddleware(handler websocket.Handler) websocket.Handler {
 		payload, err := tokens.VerifyToken(cookie.Value)
 		if err != nil {
 			log.Println("websocket: invalid or expired session")
+			ws.Close()
+			return
+		}
+
+		if revoked, revokeErr := users.IsTokenRevoked(app.DB, cookie.Value); revokeErr != nil || revoked {
+			log.Println("websocket: logged out session")
 			ws.Close()
 			return
 		}
