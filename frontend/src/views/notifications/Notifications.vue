@@ -609,6 +609,14 @@ async function rejectRequest(notification) {
         respondingInvites.value.delete(notification.id);
     }
 }
+
+// "2026-10-09T13:20:58Z" -> "Oct 9, 2026, 4:20 PM" in the viewer's own time
+function formatNotificationTime(value) {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime())
+        ? value
+        : date.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+}
 </script>
 
 <template>
@@ -690,7 +698,7 @@ async function rejectRequest(notification) {
                                 </button>
 
                                 <span class="notification-time">
-                                    {{ notification.created_at }}
+                                    {{ formatNotificationTime(notification.created_at) }}
                                 </span>
                             </div>
 

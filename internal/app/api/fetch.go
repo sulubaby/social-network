@@ -233,6 +233,10 @@ func (app *App) SearchFollows(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !app.canSeeConnections(w, userID, targetID) {
+		return
+	}
+
 	follows, err := profiles.SearchFollows(app.DB, targetID, searchValue)
 
 	if err != nil {
@@ -280,6 +284,10 @@ func (app *App) SearchFollowing(w http.ResponseWriter, r *http.Request) {
 
 	searchValue, searchOK := readSearch(w, r)
 	if !searchOK {
+		return
+	}
+
+	if !app.canSeeConnections(w, userID, targetID) {
 		return
 	}
 

@@ -5,6 +5,7 @@ import { addNotification } from '@/data/notifications';
 import { useSearchBox } from '@/helpers/search/useSearchBox';
 import { onMounted, ref } from 'vue';
 import { sideNavOpen, toggleSideNav } from '@/data/sideNav';
+import { unreadNotificationCount } from '@/data/notificationCount';
 
 const avatar = ref('');
 const { searchQuery, submitSearch } = useSearchBox();
@@ -36,6 +37,8 @@ onMounted(getData)
                 <span></span>
                 <span></span>
                 <span></span>
+                <!-- unread notifications show here too, the count itself is inside the menu -->
+                <i v-if="unreadNotificationCount > 0 && !sideNavOpen" class="burger-dot" aria-label="Unread notifications"></i>
             </button>
 
             <form class="search" role="search" @submit.prevent="submitSearch">
@@ -67,6 +70,21 @@ onMounted(getData)
 </template>
 
 <style scoped>
+.burger {
+    position: relative;
+}
+
+.burger-dot {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    width: 12px;
+    height: 12px;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    background: #e5484d;
+}
+
 .top-navigation {
     position: fixed;
     z-index: 100;

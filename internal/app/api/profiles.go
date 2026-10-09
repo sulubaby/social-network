@@ -308,6 +308,10 @@ func (app *App) GetFollowers(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if !app.canSeeConnections(w, userID, targetID) {
+		return
+	}
+
 	followers, err := profiles.GetFollowers(app.DB, targetID, 20, offset)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -367,6 +371,10 @@ func (app *App) GetFollowing(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
+	}
+
+	if !app.canSeeConnections(w, userID, targetID) {
+		return
 	}
 
 	following, err := profiles.GetFollowing(app.DB, targetID, 20, offset)
@@ -521,4 +529,42 @@ func (app *App) RejectFollowRequest(w http.ResponseWriter, r *http.Request) {
 		"status":  true,
 		"message": "follow request rejected",
 	})
+}
+
+// canSeeConnections: the followers and following lists of a private profile are
+// only for the owner and the people that follow it, like the rest of the profile
+func (app *App) canSeeConnections(w http.ResponseWriter, viewerID, targetID int) bool {
+	if viewerID == targetID {
+		return true
+	}
+
+	isPrivate, err := profiles.IsPrivate(app.DB, targetID)
+	if err == sql.ErrNoRows {
+		helpers.WriteJson(w, http.StatusNotFound, map[string]any{
+			"status":  false,
+			"message": "no user found",
+		})
+		return false
+	}
+	if err != nil {
+		helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
+			"status":  false,
+			"message": "could not check profile privacy",
+		})
+		return false
+	}
+	if !isPrivate {
+		return true
+	}
+
+	status, err := profiles.CheckFollower(app.DB, viewerID, targetID)
+	if err == nil && status == 1 {
+		return true
+	}
+
+	helpers.WriteJson(w, http.StatusForbidden, map[string]any{
+		"status":  false,
+		"message": "this profile is private",
+	})
+	return false
 }

@@ -1831,6 +1831,7 @@ onUnmounted(() => {
                         !canMessage
                     "
                     @input="onMessageInput"
+                    @keydown.enter.exact.prevent="$event.target.form?.requestSubmit()"
                 ></textarea>
 
                 <span

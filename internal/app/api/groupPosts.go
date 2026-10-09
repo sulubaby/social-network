@@ -360,8 +360,26 @@ func (app *App) InsertGroupPostReaction(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	if react.Value != 1 && react.Value != -1 {
+		helpers.WriteJson(w, http.StatusBadRequest, map[string]any{
+			"status":  false,
+			"message": "invalid reaction",
+		})
+		return
+	}
+
+	// only members of the group can like or dislike its posts
+	allowed, err := groups.UserInPostGroup(app.DB, react.PostID, userID)
+	if err != nil || !allowed {
+		helpers.WriteJson(w, http.StatusForbidden, map[string]any{
+			"status":  false,
+			"message": "you are not a member of this group",
+		})
+		return
+	}
+
 	react.UserID = userID
-	err := groups.InsertReaction(app.DB, react)
+	err = groups.InsertReaction(app.DB, react)
 
 	if err != nil {
 		helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{

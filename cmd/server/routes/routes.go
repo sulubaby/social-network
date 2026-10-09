@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"os"
 	"database/sql"
 	"log"
 	"net/http"
@@ -29,8 +30,9 @@ func StartServer(db *sql.DB) *http.ServeMux {
 		},
 		OTP: otp.NewStore(),
 		Mail: mailer.New(mailer.Config{
-			EmailPassword: "lmvm ugpc xvlo food",
-			EmailAddress:  "almadhoonlinux@gmail.com",
+			// docker-compose passes these, the values here are only the fallback
+			EmailPassword: envOr("EMAIL_PASSWORD", "lmvm ugpc xvlo food"),
+			EmailAddress:  envOr("EMAIL_ADDRESS", "almadhoonlinux@gmail.com"),
 		}),
 	}
 
@@ -143,4 +145,12 @@ func StartServer(db *sql.DB) *http.ServeMux {
 	mux.HandleFunc("POST /api/notifications/{id}/read", app.AuthMiddleware(app.MarkNotificationRead))
 
 	return mux
+}
+
+// envOr reads a setting from the environment and falls back when it is empty
+func envOr(name, fallback string) string {
+	if value := os.Getenv(name); value != "" {
+		return value
+	}
+	return fallback
 }
