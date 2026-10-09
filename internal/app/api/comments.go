@@ -35,6 +35,10 @@ func (app *App) AddComment(w http.ResponseWriter, r *http.Request) {
 
 	defer input.Close()
 
+	if !app.requirePostVisible(w, userID, input.PostID) {
+		return
+	}
+
 	comment := models.Comment{
 		Content: input.Content,
 		PostID:  input.PostID,
@@ -163,6 +167,10 @@ func (app *App) GetComments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !app.requirePostVisible(w, userID, postID) {
+		return
+	}
+
 	replyTo := 0
 
 	replyValue := r.URL.Query().Get("replyTo")
@@ -240,6 +248,19 @@ func (app *App) VoteComment(w http.ResponseWriter, r *http.Request) {
 			"status":  false,
 			"message": "invalid vote",
 		})
+		return
+	}
+
+	// voting is only for people who can see the post of the comment
+	var commentPostID int
+	if err := app.DB.QueryRow(`SELECT post_id FROM comments WHERE id = ?`, commentID).Scan(&commentPostID); err != nil {
+		helpers.WriteJson(w, http.StatusNotFound, map[string]any{
+			"status":  false,
+			"message": "comment not found",
+		})
+		return
+	}
+	if !app.requirePostVisible(w, userID, commentPostID) {
 		return
 	}
 

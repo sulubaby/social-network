@@ -13,6 +13,20 @@ import (
 func FilterPosts(db *sql.DB, posts *[]models.Post, userID, targetID int) ([]models.Post, error) {
 	var returnPosts []models.Post
 
+	// a private profile shows nothing to people who do not follow it (even the public posts)
+	if userID != targetID {
+		isPrivate, err := profiles.IsPrivate(db, targetID)
+		if err != nil {
+			return nil, err
+		}
+		if isPrivate {
+			status, err := profiles.CheckFollower(db, userID, targetID)
+			if err != nil || status != 1 {
+				return []models.Post{}, nil
+			}
+		}
+	}
+
 	for _, p := range *posts {
 		if p.GroupId == nil {
 			if p.Public == 1 {
@@ -43,6 +57,10 @@ func FilterPosts(db *sql.DB, posts *[]models.Post, userID, targetID int) ([]mode
 
 		if groupID == -1 {
 			isFollower, err := profiles.CheckFollower(db, userID, targetID)
+			// no row just means i do not follow them, the post is simply hidden
+			if err == sql.ErrNoRows {
+				continue
+			}
 			if err != nil {
 				return nil, err
 			}

@@ -480,7 +480,9 @@ func GetHomePosts(db *sql.DB, userID, offset int) ([]models.Post, error) {
 				ON prx.post_id = p.id
 				AND prx.user_id = ?
 			WHERE p.public = 1
-				AND p.user_id != ?` +
+				AND p.user_id != ?
+				-- a private account's posts are only for its followers, they come in the following part
+				AND COALESCE(pr.is_private, 0) = 0` +
 			excludeUserClause +
 			exClause +
 			viewClause + `

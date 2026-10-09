@@ -275,6 +275,10 @@ func (app *App) PostReaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !app.requirePostVisible(w, userID, rect.PostID) {
+		return
+	}
+
 	rect.UserID = userID
 	err, deletion := posts.InsertReaction(app.DB, rect)
 	if err != nil {
@@ -504,6 +508,10 @@ func (app *App) ViewPost(w http.ResponseWriter, r *http.Request) {
 			"status":  false,
 			"message": "invalid post id",
 		})
+		return
+	}
+
+	if !app.requirePostVisible(w, userID, postID) {
 		return
 	}
 

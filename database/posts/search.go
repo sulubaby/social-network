@@ -43,25 +43,40 @@ func SearchPosts(db *sql.DB, userID int, search string, limit, offset int) ([]mo
 		WHERE p.content LIKE ? ESCAPE '\'
 			AND (
 				p.user_id = ?
-				OR p.group_id = 0
 				OR (
-					p.group_id = -1
-					AND EXISTS (
-						SELECT 1
-						FROM user_followers uf
-						WHERE uf.follower_id = ?
-							AND uf.target_id = p.user_id
-							AND uf.status = 1
+					-- a private account's posts are only for its followers
+					(
+						COALESCE(pr.is_private, 0) = 0
+						OR EXISTS (
+							SELECT 1
+							FROM user_followers pf
+							WHERE pf.follower_id = ?
+								AND pf.target_id = p.user_id
+								AND pf.status = 1
+						)
 					)
-				)
-				OR (
-					g.id IS NOT NULL
-					AND (':' || g.users || ':') LIKE ('%:' || ? || ':%')
+					AND (
+						p.public = 1
+						OR (
+							p.private = 1
+							AND EXISTS (
+								SELECT 1
+								FROM user_followers uf
+								WHERE uf.follower_id = ?
+									AND uf.target_id = p.user_id
+									AND uf.status = 1
+							)
+						)
+						OR (
+							g.id IS NOT NULL
+							AND (':' || g.users || ':') LIKE ('%:' || ? || ':%')
+						)
+					)
 				)
 			)
 		ORDER BY p.created_at DESC, p.id DESC
 		LIMIT ? OFFSET ?
-	`, userID, pattern, userID, userID, userID, limit, offset)
+	`, userID, pattern, userID, userID, userID, userID, limit, offset)
 
 	if err != nil {
 		return nil, err

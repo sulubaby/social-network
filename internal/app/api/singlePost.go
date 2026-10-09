@@ -31,6 +31,10 @@ func (app *App) GetSinglePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !app.requirePostVisible(w, userID, postID) {
+		return
+	}
+
 	post, err := posts.GetSinglePost(app.DB, postID, userID)
 
 	if err == sql.ErrNoRows {
@@ -56,4 +60,27 @@ func (app *App) GetSinglePost(w http.ResponseWriter, r *http.Request) {
 		"userId": userID,
 		"data":   post,
 	})
+}
+
+// requirePostVisible answers 404 when the user is not allowed to see the post
+// (private account, followers only, or not on the chosen list), so the post
+// cannot be opened, liked, commented, voted or shared by guessing its id
+func (app *App) requirePostVisible(w http.ResponseWriter, userID, postID int) bool {
+	visible, err := posts.CanView(app.DB, userID, postID)
+	if err == sql.ErrNoRows || (err == nil && !visible) {
+		helpers.WriteJson(w, http.StatusNotFound, map[string]any{
+			"status":  false,
+			"message": "post not found",
+		})
+		return false
+	}
+	if err != nil {
+		log.Println(err)
+		helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
+			"status":  false,
+			"message": "could not check the post",
+		})
+		return false
+	}
+	return true
 }

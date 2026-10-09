@@ -106,6 +106,10 @@ func (app *App) SharePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !app.requirePostVisible(w, userID, req.PostID) {
+		return
+	}
+
 	content, err := json.Marshal(map[string]any{
 		"type":   "message",
 		"postID": req.PostID,
