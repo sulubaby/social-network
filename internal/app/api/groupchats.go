@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -522,6 +523,13 @@ func (app *App) MakeNewGroup(w http.ResponseWriter, r *http.Request) {
 
 		path, err := helpers.SaveUploads(avatar, header, "group/avatar")
 		if err != nil {
+		if errors.Is(err, helpers.ErrUploadType) {
+			helpers.WriteJson(w, http.StatusBadRequest, map[string]any{
+				"status":  false,
+				"message": err.Error(),
+			})
+			return
+		}
 			log.Println(err)
 			helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
 				"status":  false,

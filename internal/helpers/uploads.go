@@ -24,6 +24,15 @@ const MaxChatMediaSize = 8 << 20
 var ErrChatMediaTooLarge = errors.New("file is too large")
 var ErrChatMediaUnsupported = errors.New("only jpg, png, gif and webp images are allowed")
 
+var ErrUploadType = errors.New("this file type is not allowed, use jpg, png or gif (or mp4 for posts)")
+
+// what the file really is, read from its first bytes, not from its name
+var imageTypes = map[string]string{
+	"image/jpeg": ".jpg",
+	"image/png":  ".png",
+	"image/gif":  ".gif",
+}
+
 var chatMediaTypes = map[string]string{
 	"image/jpeg": ".jpg",
 	"image/png":  ".png",
@@ -48,7 +57,28 @@ func SaveUploads(file multipart.File, header *multipart.FileHeader, Type string)
 		return "", err
 	}
 
-	extension := filepath.Ext(header.Filename)
+	// check the real content, a renamed .html or .exe must not get in as .png
+	buffer := make([]byte, 512)
+
+	n, err := file.Read(buffer)
+	if err != nil && err != io.EOF {
+		return "", err
+	}
+
+	contentType := http.DetectContentType(buffer[:n])
+
+	extension, ok := imageTypes[contentType]
+	if !ok && Type == "post" && contentType == "video/mp4" {
+		extension, ok = ".mp4", true
+	}
+	if !ok {
+		return "", ErrUploadType
+	}
+
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return "", err
+	}
+
 	filename := uuid.New().String() + extension
 	filePath := filepath.Join(path, filename)
 

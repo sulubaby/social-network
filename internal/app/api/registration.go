@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"database/sql"
 	"log"
 	"net/http"
@@ -126,6 +127,13 @@ func (app *App) RegisterUser(w http.ResponseWriter, r *http.Request) {
 
 		avatarPath, err := helpers.SaveUploads(file, header, "avatar")
 		if err != nil {
+		if errors.Is(err, helpers.ErrUploadType) {
+			helpers.WriteJson(w, http.StatusBadRequest, map[string]any{
+				"status":  false,
+				"message": err.Error(),
+			})
+			return
+		}
 			log.Println(err)
 
 			helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{

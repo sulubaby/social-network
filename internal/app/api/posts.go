@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -86,6 +87,13 @@ func (app *App) AddPost(w http.ResponseWriter, r *http.Request) {
 
 		imagePath, err := helpers.SaveUploads(file, header, "post")
 		if err != nil {
+		if errors.Is(err, helpers.ErrUploadType) {
+			helpers.WriteJson(w, http.StatusBadRequest, map[string]any{
+				"status":  false,
+				"message": err.Error(),
+			})
+			return
+		}
 			helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
 				"status":  false,
 				"message": "could not save image",
