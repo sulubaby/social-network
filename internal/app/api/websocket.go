@@ -25,7 +25,7 @@ func (app *App) HandleWS(ws *websocket.Conn) {
 	}
 
 	app.register(userID, ws)
-	defer app.unregister(userID)
+	defer app.unregister(userID, ws)
 
 	app.readLoop(userID, ws)
 }
@@ -431,11 +431,26 @@ func (app *App) register(userID int, ws *websocket.Conn) {
 	app.H.Conn[userID] = ws
 }
 
-func (app *App) unregister(userID int) {
+// only remove it if it is still this connection, a newer one may have replaced it
+func (app *App) unregister(userID int, ws *websocket.Conn) {
 	app.H.Mu.Lock()
 	defer app.H.Mu.Unlock()
 
+	if app.H.Conn[userID] == ws {
+		delete(app.H.Conn, userID)
+	}
+}
+
+// closeUserSocket ends the live connection of a user, used on logout
+func (app *App) closeUserSocket(userID int) {
+	app.H.Mu.Lock()
+	conn, ok := app.H.Conn[userID]
 	delete(app.H.Conn, userID)
+	app.H.Mu.Unlock()
+
+	if ok {
+		conn.Close()
+	}
 }
 
 func (app *App) sendMessageError(userID int, clientID string, message string) {

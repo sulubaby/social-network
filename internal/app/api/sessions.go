@@ -119,6 +119,9 @@ func (app *App) DeleteSession(w http.ResponseWriter, r *http.Request) {
 			if err := users.RevokeToken(app.DB, cookie.Value, payload.Exp); err != nil {
 				log.Println("could not revoke token:", err)
 			}
+
+			// and close the live chat connection of this session
+			app.closeUserSocket(payload.UserID)
 		}
 	}
 

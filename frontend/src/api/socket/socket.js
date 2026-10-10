@@ -10,6 +10,8 @@ import {
 
 let ws = null;
 let reconnectTimer = null;
+// true after logout, so a closed socket does not come back by itself
+let stopped = false;
 const notificationDebounce = new Map();
 const toastDebounce = new Map();
 const TOAST_COOLDOWN = 10 * 1000;
@@ -102,9 +104,12 @@ export function connectToWS() {
         return ws;
     }
 
+    stopped = false;
+
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 
-    ws = new WebSocket(`${protocol}//${window.location.host}/api/ws`);
+    const socket = new WebSocket(`${protocol}//${window.location.host}/api/ws`);
+    ws = socket;
 
     let opened = false;
 
@@ -265,9 +270,11 @@ export function connectToWS() {
 
     ws.onclose = () => {
         console.log('websocket disconnected');
-        ws = null;
+        if (ws === socket) {
+            ws = null;
+        }
 
-        if (opened && !reconnectTimer) {
+        if (opened && !stopped && !reconnectTimer) {
             reconnectTimer = setTimeout(() => {
                 reconnectTimer = null;
                 connectToWS();
@@ -282,9 +289,27 @@ export function connectToWS() {
     return ws;
 }
 
+// close the socket for good, used on logout
+export function disconnectWS() {
+    stopped = true;
+
+    if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+    }
+
+    if (ws) {
+        ws.close();
+        ws = null;
+    }
+}
+
 export function sendWS(payload) {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
         console.error('websocket is disconnected');
+        if (stopped) {
+            return;
+        }
         try {
             connectToWS()
         } catch (err) {

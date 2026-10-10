@@ -1,3 +1,4 @@
+import { connectToWS, disconnectWS } from '@/api/socket/socket';
 import { checkSessionResponse } from "@/helpers/auth/auth";
 import { router } from "@/router/router";
 
@@ -73,10 +74,16 @@ export async function loggingSession(userLogger) {
         throw new Error(result.message || `Logging failed: ${resp.status}`)
     }
 
+    // open the chat socket for the new session
+    connectToWS()
+
     return result
 }
 
 export async function logout() {
+    // stop the chat socket first so it does not reconnect after logout
+    disconnectWS();
+
     const resp = await fetch("/api/session", {
         method: "DELETE",
         credentials: 'include'
