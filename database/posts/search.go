@@ -70,13 +70,20 @@ func SearchPosts(db *sql.DB, userID int, search string, limit, offset int) ([]mo
 						OR (
 							g.id IS NOT NULL
 							AND (':' || g.users || ':') LIKE ('%:' || ? || ':%')
+							AND EXISTS (
+								SELECT 1
+								FROM user_followers lf
+								WHERE lf.follower_id = ?
+									AND lf.target_id = p.user_id
+									AND lf.status = 1
+							)
 						)
 					)
 				)
 			)
 		ORDER BY p.created_at DESC, p.id DESC
 		LIMIT ? OFFSET ?
-	`, userID, pattern, userID, userID, userID, userID, limit, offset)
+	`, userID, pattern, userID, userID, userID, userID, userID, limit, offset)
 
 	if err != nil {
 		return nil, err

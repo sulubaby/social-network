@@ -68,8 +68,8 @@ func CanView(db *sql.DB, userID, postID int) (bool, error) {
 		err := db.QueryRow(`
 			SELECT users
 			FROM user_posts_groups
-			WHERE id = ?
-		`, groupID.Int64).Scan(&usersArray)
+			WHERE id = ? AND user_id = ?
+		`, groupID.Int64, authorID).Scan(&usersArray)
 
 		if err == sql.ErrNoRows {
 			return false, nil
@@ -80,9 +80,10 @@ func CanView(db *sql.DB, userID, postID int) (bool, error) {
 
 		userIDString := strconv.Itoa(userID)
 
+		// on the list and still a follower of the author
 		for _, id := range strings.Split(usersArray, ":") {
 			if id == userIDString {
-				return true, nil
+				return isFollower, nil
 			}
 		}
 	}

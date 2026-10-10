@@ -75,9 +75,10 @@ func FilterPosts(db *sql.DB, posts *[]models.Post, userID, targetID int) ([]mode
 		log.Println("group post")
 		var users string
 
+		// the list has to belong to the author of the post
 		err := db.QueryRow(
-			`SELECT users FROM user_posts_groups WHERE id = ?`,
-			groupID,
+			`SELECT users FROM user_posts_groups WHERE id = ? AND user_id = ?`,
+			groupID, p.UserId,
 		).Scan(&users)
 
 		log.Printf("users %s", users)
@@ -110,8 +111,12 @@ func FilterPosts(db *sql.DB, posts *[]models.Post, userID, targetID int) ([]mode
 			}
 		}
 
+		// and the chosen person must still follow the author
 		if isMember {
-			returnPosts = append(returnPosts, p)
+			following, err := profiles.CheckFollower(db, userID, p.UserId)
+			if err == nil && following == 1 {
+				returnPosts = append(returnPosts, p)
+			}
 		}
 	}
 

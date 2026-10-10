@@ -81,6 +81,12 @@ function previousSlide() {
 }
 
 async function handleSubmit() {
+    // "Group" privacy needs a chosen list, without one the post would go out as public
+    if (post.privacy === 'group' && !(Number(post.groupID) > 0)) {
+        addNotification('Choose who can see this post', 'error');
+        return;
+    }
+
     const data = {
         content: post.content,
         allowComments: post.hideComments ? 0 : 1,

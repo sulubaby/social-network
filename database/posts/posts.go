@@ -95,11 +95,12 @@ func GroupExists(db *sql.DB, groupID, userID int) error {
 		return nil
 	}
 
-	err := db.QueryRow(`
+	// Scan is needed: QueryRow(...).Err() never reports "no rows", so before
+	// anyone could post to somebody else's list
+	var exists int
+	return db.QueryRow(`
 		SELECT 1 FROM user_posts_groups WHERE id = ? AND user_id = ?
-	`, groupID, userID)
-
-	return err.Err()
+	`, groupID, userID).Scan(&exists)
 }
 
 func GetHomePosts(db *sql.DB, userID, offset int) ([]models.Post, error) {
@@ -296,6 +297,7 @@ func GetHomePosts(db *sql.DB, userID, offset int) ([]models.Post, error) {
 			FROM posts p
 			JOIN user_posts_groups g
 				ON p.group_id = g.id
+				AND g.user_id = p.user_id
 			JOIN user u
 				ON u.id = p.user_id
 			LEFT JOIN profile pr
@@ -303,14 +305,19 @@ func GetHomePosts(db *sql.DB, userID, offset int) ([]models.Post, error) {
 			LEFT JOIN post_reactions prx
 				ON prx.post_id = p.id
 				AND prx.user_id = ?
-			WHERE (':' || g.users || ':') LIKE ('%:' || ? || ':%')` +
+			WHERE (':' || g.users || ':') LIKE ('%:' || ? || ':%')
+				-- chosen people only see it while they still follow the author
+				AND EXISTS (
+					SELECT 1 FROM user_followers lf
+					WHERE lf.follower_id = ? AND lf.target_id = p.user_id AND lf.status = 1
+				)` +
 			exClause +
 			viewClause + `
 			ORDER BY p.created_at DESC
 			LIMIT ?
 		`
 
-		args := []interface{}{userID, userID}
+		args := []interface{}{userID, userID, userID}
 
 		args = append(args, exArgs...)
 

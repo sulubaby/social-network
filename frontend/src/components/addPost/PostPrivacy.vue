@@ -25,7 +25,8 @@ watch(() => props.modelValue, (value) => {
     if (value === 'public') {
         groupIDValue.value = 0;
     } else if (value === 'followers') {
-        groupIDValue.value = 0;
+        // -1 is "followers only" on the server, 0 would make the post public
+        groupIDValue.value = -1;
     } else if (value === 'group') {
         groupIDValue.value = props.groupId ?? null;
     } else {
