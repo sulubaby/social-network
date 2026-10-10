@@ -957,10 +957,26 @@ async function respondToInvite(msg, status) {
 async function receiveMessage(event) {
     const incoming = event.detail;
 
+    if (!props.chat) {
+        return;
+    }
+
+    // a new chat has no group id yet, so when the other person replies
+    // we take the id from their message and load the chat properly
+    const noGroupYet =
+        props.groupID === null ||
+        props.groupID === undefined;
+
     if (
-        !props.chat ||
-        incoming.GroupID !== props.groupID
+        noGroupYet &&
+        incoming.GroupID &&
+        Number(incoming.Sender?.ID) === Number(props.userID)
     ) {
+        emit('chat-resolved', incoming.GroupID);
+        return;
+    }
+
+    if (incoming.GroupID !== props.groupID) {
         return;
     }
 
