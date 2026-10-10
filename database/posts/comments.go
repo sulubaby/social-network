@@ -114,7 +114,7 @@ func GetComments(db *sql.DB, postID, replyTo, limit, offset, userID int, orderBy
 				COALESCE(
 					(
 						SELECT count
-						FROM comments_votes
+						FROM comment_votes
 						WHERE user_id = ? AND comment_id = c.id
 					),
 					0
