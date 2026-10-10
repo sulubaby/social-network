@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"social/database/posts"
 	"social/database/profiles"
@@ -229,7 +230,18 @@ func (app *App) GetHomePosts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	homePosts, err := posts.GetHomePosts(app.DB, userID, offset)
+	// ids of the posts the feed already shows, "1,2,3"
+	var shownIDs []int
+	for _, part := range strings.Split(r.URL.Query().Get("exclude"), ",") {
+		if id, err := strconv.Atoi(strings.TrimSpace(part)); err == nil && id > 0 {
+			shownIDs = append(shownIDs, id)
+		}
+		if len(shownIDs) >= 1000 {
+			break
+		}
+	}
+
+	homePosts, err := posts.GetHomePosts(app.DB, userID, shownIDs)
 
 	if err != nil {
 		log.Println(err)

@@ -103,7 +103,8 @@ func GroupExists(db *sql.DB, groupID, userID int) error {
 	`, groupID, userID).Scan(&exists)
 }
 
-func GetHomePosts(db *sql.DB, userID, offset int) ([]models.Post, error) {
+// shownIDs are the posts the page already has, so "load more" never sends them again
+func GetHomePosts(db *sql.DB, userID int, shownIDs []int) ([]models.Post, error) {
 	var posts []models.Post
 
 	seen := make(map[int]bool)
@@ -154,16 +155,21 @@ func GetHomePosts(db *sql.DB, userID, offset int) ([]models.Post, error) {
 	}
 
 	excludeClause := func() (string, []interface{}) {
-		if len(posts) == 0 {
+		if len(posts) == 0 && len(shownIDs) == 0 {
 			return "", nil
 		}
 
-		placeholders := make([]string, len(posts))
-		args := make([]interface{}, len(posts))
+		var placeholders []string
+		var args []interface{}
 
-		for i, p := range posts {
-			placeholders[i] = "?"
-			args[i] = p.Id
+		for _, id := range shownIDs {
+			placeholders = append(placeholders, "?")
+			args = append(args, id)
+		}
+
+		for _, p := range posts {
+			placeholders = append(placeholders, "?")
+			args = append(args, p.Id)
 		}
 
 		return " AND p.id NOT IN (" + strings.Join(placeholders, ",") + ")", args
@@ -425,7 +431,7 @@ func GetHomePosts(db *sql.DB, userID, offset int) ([]models.Post, error) {
 		return appendPosts(rows)
 	}
 
-	runRandomQuery := func(excludeUserIDs []int, unviewedOnly bool, limit int, withOffset bool) error {
+	runRandomQuery := func(excludeUserIDs []int, unviewedOnly bool, limit int) error {
 		if limit <= 0 {
 			return nil
 		}
@@ -452,12 +458,6 @@ func GetHomePosts(db *sql.DB, userID, offset int) ([]models.Post, error) {
 					WHERE pv.post_id = p.id
 						AND pv.user_id = ?
 				)`
-		}
-
-		offsetClause := ""
-
-		if withOffset {
-			offsetClause = " OFFSET ?"
 		}
 
 		query := `
@@ -494,8 +494,7 @@ func GetHomePosts(db *sql.DB, userID, offset int) ([]models.Post, error) {
 			exClause +
 			viewClause + `
 			ORDER BY p.created_at DESC
-			LIMIT ?` +
-			offsetClause
+			LIMIT ?`
 
 		args := []interface{}{userID, userID}
 
@@ -507,10 +506,6 @@ func GetHomePosts(db *sql.DB, userID, offset int) ([]models.Post, error) {
 		}
 
 		args = append(args, limit)
-
-		if withOffset {
-			args = append(args, offset)
-		}
 
 		rows, err := db.Query(query, args...)
 
@@ -581,7 +576,6 @@ func GetHomePosts(db *sql.DB, userID, offset int) ([]models.Post, error) {
 			excluded,
 			true,
 			remaining,
-			false,
 		); err != nil {
 			return nil, err
 		}
@@ -633,7 +627,6 @@ func GetHomePosts(db *sql.DB, userID, offset int) ([]models.Post, error) {
 			excluded,
 			false,
 			remaining,
-			true,
 		); err != nil {
 			return nil, err
 		}

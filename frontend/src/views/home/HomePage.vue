@@ -39,7 +39,8 @@ async function loadPosts() {
 
     try {
         const response = await fetch(
-            `/api/posts?offset=${offset.value}`,
+            // send the posts we already have so the next page does not repeat them
+            `/api/posts?offset=${offset.value}&exclude=${posts.value.map(p => p.id).join(',')}`,
             {
                 method: 'GET',
                 credentials: 'include'
@@ -67,7 +68,8 @@ async function loadPosts() {
             );
         });
 
-        posts.value.push(...newPosts);
+        const have = new Set(posts.value.map(p => p.id));
+        posts.value.push(...newPosts.filter(p => !have.has(p.id)));
         offset.value += newPosts.length;
 
         if (newPosts.length < 13) {
