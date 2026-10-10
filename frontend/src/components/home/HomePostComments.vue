@@ -18,7 +18,9 @@ const props = defineProps({
     avatarPath: { type: String, default: '' },
     createdAt: { type: String, default: '' },
     content: { type: String, default: '' },
-    imagePath: { type: String, default: '' }
+    imagePath: { type: String, default: '' },
+    // false when the author turned comments off
+    allowComments: { type: Boolean, default: true }
 });
 
 const emit = defineEmits(['close']);
@@ -430,7 +432,9 @@ watch(() => props.show, value => { if (value) loadComments(); });
                     <button type="button" aria-label="Remove image" @click="clearMedia">✕</button>
                 </div>
 
-                <form class="add-comment" @submit.prevent="submitComment">
+                <p v-if="!allowComments" class="comments-off">Comments are turned off for this post.</p>
+
+                <form v-else class="add-comment" @submit.prevent="submitComment">
                     <input ref="fileInput" type="file" class="media-file-input" :accept="COMMENT_MEDIA_ACCEPT"
                         @change="onSelect">
                     <button type="button" class="media-button" title="Add an image or GIF" aria-label="Add an image or GIF"
@@ -455,6 +459,15 @@ watch(() => props.show, value => { if (value) loadComments(); });
 </template>
 
 <style scoped>
+.comments-off {
+    margin: 0;
+    padding: 14px 16px;
+    border-top: 1px solid #ddd;
+    color: #666;
+    font-size: 14px;
+    text-align: center;
+}
+
 .comments-dialog {
     --cd-bg: #ffffff;
     --cd-surface: #f4f4f4;

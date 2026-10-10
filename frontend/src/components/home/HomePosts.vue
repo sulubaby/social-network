@@ -398,7 +398,8 @@ onBeforeUnmount(() => {
 
         <HomePostComments :show="showComments" :post-id="postId" :current-user-id="currentUserId"
             :first-name="firstName" :last-name="lastName" :avatar-path="avatarPath" :created-at="createdAt"
-            :content="content" :image-path="imagePath" :post-owner-id="userId" @close="showComments = false" />
+            :content="content" :image-path="imagePath" :post-owner-id="userId"
+            :allow-comments="Boolean(props.allowComments)" @close="showComments = false" />
 
         <LocationDialouge :show="showLocationDialog" :display="locationParts?.display" :embed-url="mapEmbedUrl"
             :external-url="mapExternalUrl" @close="closeLocationDialog" />

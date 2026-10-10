@@ -202,12 +202,12 @@ async function confirmDelete() {
             @toggle-comments="toggleComments" />
 
         <HomePostAction :reaction="post.reactionValue" :post-id="post.id" :likes="post.likeCount"
-            :dislikes="post.dislikeCount" @toggle-comments="toggleComments" />
+            :dislikes="post.dislikeCount" :allow-comments="Boolean(post.allowComments)" @toggle-comments="toggleComments" />
 
         <HomePostComments :show="showComments" :post-id="post.id" :current-user-id="currentUserId"
             :first-name="post.firstName" :last-name="post.lastName" :avatar-path="post.avatarPath"
             :created-at="post.createdAt" :content="post.content" :image-path="post.imagePath"
-            :post-owner-id="post.userId" @close="showComments = false" />
+            :post-owner-id="post.userId" :allow-comments="Boolean(post.allowComments)" @close="showComments = false" />
 
         <LocationDialouge :show="showLocationDialog" :display="locationParts?.display" :embed-url="mapEmbedUrl"
             :external-url="mapExternalUrl" @close="closeLocationDialog" />

@@ -652,6 +652,7 @@ onBeforeUnmount(() => {
             :content="post.content || ''"
             image-path=""
             :post-owner-id="post.userId"
+            :allow-comments="Boolean(post.allowComments)"
             @close="showComments = false"
         />
 

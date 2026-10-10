@@ -39,6 +39,16 @@ func (app *App) AddComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// the author turned comments off for this post
+	var allowComments bool
+	if err := app.DB.QueryRow(`SELECT allow_comments FROM posts WHERE id = ?`, input.PostID).Scan(&allowComments); err != nil || !allowComments {
+		helpers.WriteJson(w, http.StatusForbidden, map[string]any{
+			"status":  false,
+			"message": "comments are turned off for this post",
+		})
+		return
+	}
+
 	comment := models.Comment{
 		Content: input.Content,
 		PostID:  input.PostID,
