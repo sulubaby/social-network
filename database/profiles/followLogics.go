@@ -71,6 +71,7 @@ func GetFollowers(db *sql.DB, targetID, count, offset int) (map[int]models.UserR
 		LEFT JOIN profile p
 			ON p.user_id = u.id
 		WHERE uf.target_id = ?
+			AND uf.status = 1
 		ORDER BY u.id
 		LIMIT ?
 		OFFSET ?
@@ -141,8 +142,11 @@ func GetFollowing(db *sql.DB, followerID, count, offset int) (map[int]models.Use
 		LEFT JOIN profile p
 			ON p.user_id = u.id
 		WHERE uf.follower_id = ?
+			AND uf.status = 1
+		ORDER BY u.id
 		LIMIT ?
-	`, followerID, count)
+		OFFSET ?
+	`, followerID, count, offset)
 
 	if err != nil {
 		return nil, err

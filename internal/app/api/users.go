@@ -89,7 +89,7 @@ func (app *App) GetUserData(w http.ResponseWriter, r *http.Request) {
 
 	userData.Followers = followers
 
-	following, err := profiles.GetFollowers(app.DB, userID, 10, 0)
+	following, err := profiles.GetFollowing(app.DB, userID, 10, 0)
 	if err != nil {
 		log.Println(err)
 		helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
