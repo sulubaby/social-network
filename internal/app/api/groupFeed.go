@@ -48,7 +48,8 @@ func (app *App) GetGroupPosts(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	userIN, err := groups.UserIN(app.DB, groupID, userID)
+	// accepted members only, a pending invite or join request is not enough
+	userIN, err := groups.IsMember(app.DB, groupID, userID)
 
 	if err != nil {
 		log.Println(err)

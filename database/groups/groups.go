@@ -562,6 +562,8 @@ func GroupExists(db *sql.DB, groupID int) (bool, error) {
 	return exists, nil
 }
 
+// UserIN is true for any row: member, pending invite or pending join request.
+// use IsMember when the user must really be in the group
 func UserIN(db *sql.DB, groupID, userID int) (bool, error) {
 	var exists bool
 
