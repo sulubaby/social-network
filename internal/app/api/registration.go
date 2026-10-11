@@ -19,6 +19,14 @@ import (
 	"golang.org/x/net/websocket"
 )
 
+/*
+strcuter made when the server start and used to hold server information
+-DB -> database connection
+
+-H -> hold a map of current user connections and the mutex
+
+-Mail -> hold the configiration data of the email used to send email tokens
+*/
 type App struct {
 	DB   *sql.DB
 	H    *Hub
@@ -26,11 +34,23 @@ type App struct {
 	Mail *mailer.Mailer
 }
 
+/*
+strcuter made when the server start in saved in App struct. it is used to hold a map 
+of key of user ID and value of their connection
+*/
 type Hub struct {
 	Conn map[int]*websocket.Conn
 	Mu   sync.RWMutex
 }
 
+/*
+function of type handler interface used to register user into the database. it start
+by getting the data. verifying the email token, verifing the data then register the user
+
+@METHOD: 	POST
+
+@AUTHENTICATION REQUIRED: FALSE
+*/
 func (app *App) RegisterUser(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, validation.MaxFormMemory+(1<<20))
 

@@ -15,6 +15,10 @@ import (
 	"strconv"
 )
 
+/*
+function of interface type handler used to send a chat message that include media. groupID is decieding 
+wether the message should be sent to a groupchat or a private chat 
+*/
 func (app *App) SendChatMedia(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(int)
 	if !ok {
@@ -25,6 +29,7 @@ func (app *App) SendChatMedia(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// max byte reader just limit the size of the request
 	r.Body = http.MaxBytesReader(w, r.Body, helpers.MaxChatMediaSize+(1<<20))
 
 	if err := r.ParseMultipartForm(helpers.MaxChatMediaSize); err != nil {

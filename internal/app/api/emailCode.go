@@ -40,6 +40,14 @@ func isSixDigits(code string) bool {
 	return true
 }
 
+/**
+function of type handler used to check the availability of a username or email address
+by validating the provided type and value, then checking whether the value already exists
+in the database.
+
+@METHOD
+	-> GET
+*/
 func (app *App) CheckAvailability(w http.ResponseWriter, r *http.Request) {
 	kind := r.URL.Query().Get("type")
 
@@ -79,8 +87,8 @@ func (app *App) CheckAvailability(w http.ResponseWriter, r *http.Request) {
 func (app *App) SendEmailCode(w http.ResponseWriter, r *http.Request) {
 	var req emailCodeRequest
 
+	
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<10)
-
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		helpers.WriteJson(w, http.StatusBadRequest, map[string]any{
 			"status":  false,
@@ -101,9 +109,6 @@ func (app *App) SendEmailCode(w http.ResponseWriter, r *http.Request) {
 
 	available, err := users.IsAvailable(app.DB, "email", email)
 	if err != nil {
-		log.Println(err)
-
-		log.Println(err)
 		helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
 			"status":  false,
 			"message": "Something went wrong. Please try again.",
@@ -132,8 +137,6 @@ func (app *App) SendEmailCode(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		log.Println(err)
-
 		helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
 			"status":  false,
 			"message": "Something went wrong. Please try again.",
@@ -161,6 +164,14 @@ func (app *App) SendEmailCode(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+
+/*
+function of type handler used to verify a code to verify the email and complete the registration.
+it also normalize the email and returns a bda request error if the recieved code is not a six digit code.
+
+@METHOD
+	-> POST
+*/
 func (app *App) VerifyEmailCode(w http.ResponseWriter, r *http.Request) {
 	var req verifyCodeRequest
 

@@ -13,6 +13,13 @@ import (
 	"time"
 )
 
+/*
+function of type handler, used to verify user login attempt. it recieve an identifier (email or username) and a password
+if verifying success then it make a token and write it in the cookies.
+
+@METHOD
+	-> POST
+*/
 func (app *App) LoggingUser(w http.ResponseWriter, r *http.Request) {
 	var logger models.UserLogger
 
@@ -99,8 +106,21 @@ func (app *App) LoggingUser(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+/*
+function of type handler, used to authorize a session. it is written on top of a middle ware so 
+all thw work is done in the middleware and the job of this function is just to return ok status
+
+@METHOD
+	-> GET
+*/
 func (app *App) AuthorizeSession(w http.ResponseWriter, r *http.Request) {
-	userID, _ := r.Context().Value("userID").(int)
+	userID, ok := r.Context().Value("userID").(int)
+
+	if !ok {
+		helpers.WriteJson(w, http.StatusUnauthorized, map[string]any {
+			"status": false,
+		})
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -112,6 +132,14 @@ func (app *App) AuthorizeSession(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+
+/*
+function of type handler, it job is to complete the logout process by deleting the cookie, it also verify if the cookie is true
+if so it delete it from the database.
+
+@METHOD
+	-> DELETE
+*/
 func (app *App) DeleteSession(w http.ResponseWriter, r *http.Request) {
 	// remember the token as logged out, so a copy of the cookie stops working too
 	if cookie, err := r.Cookie("token"); err == nil && cookie.Value != "" {

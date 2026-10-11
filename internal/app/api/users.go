@@ -14,6 +14,13 @@ import (
 	"social/internal/validation"
 )
 
+/*
+function of type handler used to handle users deleting account. it start with deleteing the account
+from the database. if success then finish with deleting the cookies
+
+@METHOD:
+	-> DELETE
+*/
 func (app *App) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(int)
 	if !ok {
@@ -46,6 +53,14 @@ func (app *App) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+/*
+function of type handler used to get user data that are shown in the profile. it collects the basic
+user data, the about section, the followers, the following and the friends of the logged in user and
+returns them all together in one response.
+
+@ METHOD
+	-> GET
+*/
 func (app *App) GetUserData(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(int)
 	if !ok {
@@ -58,7 +73,6 @@ func (app *App) GetUserData(w http.ResponseWriter, r *http.Request) {
 
 	userData, err := users.GetUserData(app.DB, userID)
 	if err != nil {
-		log.Println(err, "here")
 		helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
 			"status":  false,
 			"message": "could not get user data",
@@ -117,6 +131,15 @@ func (app *App) GetUserData(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+/*
+function of type handler used to update user personal information. the request should have all the data
+changed or not. the body is validated first, then the password is hashed if a new one was sent. if the
+user switches the account to public, all the pending follow requests are accepted (by a database trigger)
+and each requester gets notified.
+
+@METHOD
+	-> PATCH
+*/
 func (app *App) UpdateUserInfo(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(int)
 	if !ok {
@@ -193,6 +216,15 @@ func (app *App) UpdateUserInfo(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+/*
+function of type handler used to update user avatar. it reads the uploaded image from the multipart
+form (field name "avatar"), checks that it is smaller than 5MB and is a JPG, PNG or GIF, saves it to the
+uploads folder, then stores the new path in the database. if the database update fails the saved file
+is removed so no orphan files are left behind.
+
+@METHOD
+	-> POST (multipart/form-data)
+*/
 func (app *App) UpdateUserAvatar(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(int)
 
@@ -279,6 +311,13 @@ func (app *App) UpdateUserAvatar(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+/*
+function of type handler used to get the "about" section of the logged in user's profile (the extra
+profile information, separate from the basic account data). returns the about data as json.
+
+@METHOD
+	-> GET
+*/
 func (app *App) GetUserAbout(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(int)
 	if !ok {
@@ -304,6 +343,13 @@ func (app *App) GetUserAbout(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+/*
+function of type handler used to update the "about" section of the logged in user's profile. the body
+should be a json of the about fields, they are validated first then saved in the database.
+
+@METHOD
+	-> PATCH
+*/
 func (app *App) UpdateUserAbout(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(int)
 	if !ok {

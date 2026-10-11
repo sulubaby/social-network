@@ -13,6 +13,17 @@ import (
 	"strings"
 )
 
+/*
+function of type handler used to search for a location (used when the user fills in places like city or
+hometown). the search text is taken from the query (?q=) and must be between 2 and 150 characters. the
+language is taken from the Accept-Language header (default "en"). it first looks in the in-memory cache,
+if there is no cached result it sends the search to the OpenStreetMap Nominatim API (after waiting for the
+throttle so the API rate limit is respected), caches the response and returns it as it is (json, up to 8
+results with the address details). this handler does not need the user to be logged in.
+
+@METHOD
+	-> GET
+*/
 func (app *App) SearchLocation(w http.ResponseWriter, r *http.Request) {
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
 
@@ -125,6 +136,16 @@ func (app *App) SearchLocation(w http.ResponseWriter, r *http.Request) {
 	w.Write(body)
 }
 
+/*
+function of type handler used to get the friends of a user. the query takes ?offset= (the number of friends
+to skip, used for pagination, required) and optionally ?targetid= (the user to get the friends of). if
+targetid is missing (or "null" / "undefined") the friends of the logged in user are returned. the search
+text is read with readSearch, if it is empty the friends are returned page by page using the offset, if it
+is not empty the friends matching the search are returned instead.
+
+@METHOD
+	-> GET
+*/
 func (app *App) GetFriends(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(int)
 	if !ok {
@@ -199,6 +220,15 @@ func (app *App) GetFriends(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+/*
+function of type handler used to search in the followers of a user. the search text is read with readSearch
+and optionally ?targetid= is used to choose the user (if it is missing, or "null" / "undefined", the
+followers of the logged in user are searched). for a private profile only the owner and the people
+following it are allowed to search.
+
+@METHOD
+	-> GET
+*/
 func (app *App) SearchFollows(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(int)
 
@@ -253,6 +283,15 @@ func (app *App) SearchFollows(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+/*
+function of type handler used to search in the users that a user is following. the search text is read with
+readSearch and optionally ?targetid= is used to choose the user (if it is missing, or "null" / "undefined",
+the following list of the logged in user is searched). for a private profile only the owner and the people
+following it are allowed to search.
+
+@METHOD
+	-> GET
+*/
 func (app *App) SearchFollowing(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(int)
 

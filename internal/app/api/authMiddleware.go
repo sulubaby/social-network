@@ -12,6 +12,18 @@ import (
 	"golang.org/x/net/websocket"
 )
 
+// AuthMiddleware authenticates the current user before passing the request
+// to the provided handler by verifying the token cookie, checking whether
+// the session has been revoked, and confirming that the user exists.
+//
+// @Parameters:
+//   - handler: http.HandlerFunc
+//     The handler to execute after successful authentication.
+//
+// @Returns:
+//   - http.HandlerFunc
+//     The wrapped handler that authenticates the user before executing
+//     the original handler.
 func (app *App) AuthMiddleware(handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		cookie, err := r.Cookie("token")
@@ -36,7 +48,7 @@ func (app *App) AuthMiddleware(handler http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		// a logged out token is not accepted anymore
+		
 		if revoked, revokeErr := users.IsTokenRevoked(app.DB, cookie.Value); revokeErr != nil || revoked {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
@@ -74,6 +86,18 @@ func (app *App) AuthMiddleware(handler http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// WebSocket connection to the provided handler by verifying the token
+// cookie, checking whether the session has been revoked, and confirming
+// that the user exists.
+//
+// @Parameters:
+//   - handler: websocket.Handler
+//     The WebSocket handler to execute after successful authentication.
+//
+// @Returns:
+//   - websocket.Handler
+//     The wrapped WebSocket handler that authenticates the user before
+//     executing the original handler.
 func (app *App) WSAuthMiddleware(handler websocket.Handler) websocket.Handler {
 	return func(ws *websocket.Conn) {
 		cookie, err := ws.Request().Cookie("token")

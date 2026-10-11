@@ -13,6 +13,18 @@ import (
 	"strconv"
 )
 
+/*
+function of type handler used to get the profile of another user. the id of the profile is taken from the
+query (?id=). if the profile is public, or it is private but the logged in user follows it, the full profile
+is returned with the visibility settings applied, the follow status and if the logged in user can message
+this user. otherwise only the limited private profile data is returned with showProfile set to false.
+viewing your own profile with this handler is not allowed.
+
+followStatus: 1 -> following, 0 -> request pending, -1 -> not following
+
+@METHOD
+	-> GET
+*/
 func (app *App) GetUserProfile(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(int)
 	if !ok {
@@ -161,6 +173,15 @@ func (app *App) GetUserProfile(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+/*
+function of type handler used to follow another user. the id of the user to follow is taken from the
+query (?targetid=). if the target profile is public the follow is done directly (followStatus 1) and the
+target is notified that someone started following them. if it is private, a follow request is sent
+instead (followStatus 0) and the target is notified of the request. following yourself is not allowed.
+
+@METHOD
+	-> POST
+*/
 func (app *App) RequestFollow(w http.ResponseWriter, r *http.Request) {
 	followerID, ok := r.Context().Value("userID").(int)
 
@@ -233,6 +254,14 @@ func (app *App) RequestFollow(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+/*
+function of type handler used to cancel a follow request or unfollow a user. the id of the target user is
+taken from the query (?targetid=). it removes the relation between the logged in user (the follower) and the
+target, then returns followStatus -1 (not following).
+
+@METHOD
+	-> DELETE
+*/
 func (app *App) CancelRequest(w http.ResponseWriter, r *http.Request) {
 	followerID, ok := r.Context().Value("userID").(int)
 	if !ok {
@@ -271,6 +300,15 @@ func (app *App) CancelRequest(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
+/*
+function of type handler used to get the followers of a user, 20 at a time. the query takes ?offset= (the
+number of followers to skip, used for pagination) and optionally ?targetid= (the user to get the followers
+of). if targetid is missing (or "null" / "undefined") the followers of the logged in user are returned. for a
+private profile only the owner and the people following it are allowed to see the list.
+
+@METHOD
+	-> GET
+*/
 func (app *App) GetFollowers(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(int)
 	if !ok {
@@ -336,6 +374,15 @@ func (app *App) GetFollowers(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+/*
+function of type handler used to get the users that a user is following, 20 at a time. the query takes
+?offset= (the number of users to skip, used for pagination) and optionally ?targetid= (the user to get the
+following list of). if targetid is missing (or "null" / "undefined") the list of the logged in user is
+returned. for a private profile only the owner and the people following it are allowed to see the list.
+
+@METHOD
+	-> GET
+*/
 func (app *App) GetFollowing(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(int)
 	if !ok {
@@ -401,6 +448,14 @@ func (app *App) GetFollowing(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+/*
+function of type handler used to remove a follower of the logged in user. the id of the follower to remove
+is taken from the query (?targetid=). it deletes the relation where the target follows the logged in user,
+so the target stops following them. removing yourself is not allowed.
+
+@METHOD
+	-> DELETE
+*/
 func (app *App) RemoveFollower(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(int)
 	if !ok {
@@ -437,6 +492,14 @@ func (app *App) RemoveFollower(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+/*
+function of type handler used to accept a pending follow request sent to the logged in user. the id of the
+user who sent the request is taken from the query (?targetid=). if the accept succeeds, the requester is
+notified that their request was accepted.
+
+@METHOD
+	-> POST
+*/
 func (app *App) AcceptFollowRequest(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(int)
 
@@ -484,6 +547,14 @@ func (app *App) AcceptFollowRequest(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+/*
+function of type handler used to reject a pending follow request sent to the logged in user. the id of the
+user who sent the request is taken from the query (?targetid=). if there is no such request it returns
+404 (follow request not found).
+
+@METHOD
+	-> POST
+*/
 func (app *App) RejectFollowRequest(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(int)
 
