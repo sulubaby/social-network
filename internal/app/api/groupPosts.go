@@ -182,6 +182,30 @@ func (app *App) AddGroupPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(taggedPeople) > 0 {
+		members, err := groups.GroupMemberIDsAmong(app.DB, groupID, taggedPeople)
+		if err != nil {
+			log.Println(err)
+
+			helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
+				"status":  false,
+				"message": "could not verify tagged people",
+			})
+			return
+		}
+
+		for _, id := range taggedPeople {
+			if !members[id] {
+				helpers.WriteJson(w, http.StatusBadRequest, map[string]any{
+					"status":  false,
+					"field":   "tags",
+					"message": "you can only tag members of this group",
+				})
+				return
+			}
+		}
+	}
+
 	postID, err := groups.AddPost(app.DB, post, groupID, taggedPeople)
 
 	if err != nil {
@@ -228,7 +252,7 @@ func (app *App) AddGroupPost(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *App) GetGroupMembers(w http.ResponseWriter, r *http.Request) {
-	_, ok := r.Context().Value("userID").(int)
+	userID, ok := r.Context().Value("userID").(int)
 	if !ok {
 		helpers.WriteJson(w, http.StatusUnauthorized, map[string]any{
 			"status":  false,
@@ -237,53 +261,100 @@ func (app *App) GetGroupMembers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	groupIDParam := r.URL.Query().Get("groupID")
-	groupID := -1
-	if groupIDParam != "" && groupIDParam != "null" && groupIDParam != "undefined" {
-		parsedTargetID, err := strconv.Atoi(groupIDParam)
-		if err != nil {
-			helpers.WriteJson(w, http.StatusBadRequest, map[string]any{
-				"status":  false,
-				"message": "invalid targetid",
-			})
-			return
-		}
-		groupID = parsedTargetID
+	groupIDParam := r.URL.Query().Get("targetid")
+	if groupIDParam == "" {
+		groupIDParam = r.URL.Query().Get("groupID")
+	}
+
+	groupID, err := strconv.Atoi(groupIDParam)
+	if err != nil || groupID <= 0 {
+		helpers.WriteJson(w, http.StatusBadRequest, map[string]any{
+			"status":  false,
+			"message": "invalid group",
+		})
+		return
 	}
 
 	searchValue, searchOK := readSearch(w, r)
 	if !searchOK {
 		return
 	}
-	queryOffset := r.URL.Query().Get("offset")
-	offset, err := strconv.Atoi(queryOffset)
 
-	if err != nil || offset < 0 {
-		helpers.WriteJson(w, http.StatusBadRequest, map[string]any{
+	offset := 0
+
+	if queryOffset := r.URL.Query().Get("offset"); queryOffset != "" {
+		offset, err = strconv.Atoi(queryOffset)
+
+		if err != nil || offset < 0 {
+			helpers.WriteJson(w, http.StatusBadRequest, map[string]any{
+				"status":  false,
+				"message": "invalid offset",
+			})
+			return
+		}
+	}
+
+	userIN, err := groups.IsMember(app.DB, groupID, userID)
+	if err != nil {
+		log.Println(err)
+		helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
 			"status":  false,
-			"message": "invalid offset",
+			"message": "could not verify group",
+		})
+		return
+	}
+
+	if !userIN {
+		helpers.WriteJson(w, http.StatusForbidden, map[string]any{
+			"status":  false,
+			"message": "you are not a member of this group",
 		})
 		return
 	}
 
 	if searchValue == "" {
+		helpers.WriteJson(w, http.StatusOK, map[string]any{
+			"status":  true,
+			"message": "members fetched",
+			"data":    map[int]models.UserRegistration{},
+		})
 		return
 	}
 
-	friends, err := groups.SearchGroupMembers(app.DB, groupID, searchValue, offset, 10)
+	ids, err := groups.SearchGroupMembers(app.DB, groupID, searchValue, offset, 10)
 	if err != nil {
 		log.Println(err)
 		helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
 			"status":  false,
-			"message": "could not get friends",
-			"data":    friends,
+			"message": "could not get members",
 		})
 		return
 	}
+
+	members := make(map[int]models.UserRegistration)
+
+	for _, id := range ids {
+		if id == userID {
+			continue
+		}
+
+		member, err := users.GetUserSimpleData(app.DB, id)
+		if err != nil {
+			log.Println(err)
+			helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
+				"status":  false,
+				"message": "could not get members",
+			})
+			return
+		}
+
+		members[id] = member
+	}
+
 	helpers.WriteJson(w, http.StatusOK, map[string]any{
 		"status":  true,
-		"message": "friends fetched",
-		"data":    friends,
+		"message": "members fetched",
+		"data":    members,
 	})
 }
 

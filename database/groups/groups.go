@@ -543,6 +543,28 @@ func SearchGroupMembers(db *sql.DB, groupID int, search string, offset int, limi
 	return ids, nil
 }
 
+func GroupMemberIDsAmong(db *sql.DB, groupID int, userIDs []int) (map[int]bool, error) {
+	members := make(map[int]bool)
+
+	for _, id := range userIDs {
+		if id <= 0 || members[id] {
+			continue
+		}
+
+		isMember, err := IsMember(db, groupID, id)
+
+		if err != nil {
+			return nil, err
+		}
+
+		if isMember {
+			members[id] = true
+		}
+	}
+
+	return members, nil
+}
+
 func GroupExists(db *sql.DB, groupID int) (bool, error) {
 	var exists bool
 

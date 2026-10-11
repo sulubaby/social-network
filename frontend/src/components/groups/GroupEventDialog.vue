@@ -21,6 +21,8 @@ const description = ref('');
 const eventTime = ref('');
 const submitting = ref(false);
 const minTime = ref('');
+const maxTime = ref('');
+const MAX_EVENT_YEARS = 10;
 const formError = ref('');
 
 function currentLocalTime() {
@@ -29,8 +31,16 @@ function currentLocalTime() {
     return now.toISOString().slice(0, 16);
 }
 
+function maxLocalTime() {
+    const limit = new Date();
+    limit.setFullYear(limit.getFullYear() + MAX_EVENT_YEARS);
+    limit.setMinutes(limit.getMinutes() - limit.getTimezoneOffset());
+    return limit.toISOString().slice(0, 16);
+}
+
 function resetEventForm() {
     minTime.value = currentLocalTime();
+    maxTime.value = maxLocalTime();
     title.value = '';
     description.value = '';
     eventTime.value = '';
@@ -70,6 +80,14 @@ async function submitEvent() {
 
     if (new Date(eventDate).getTime() <= Date.now()) {
         formError.value = 'Event cannot be in the past';
+        return;
+    }
+
+    const latestAllowed = new Date();
+    latestAllowed.setFullYear(latestAllowed.getFullYear() + MAX_EVENT_YEARS);
+
+    if (new Date(eventDate).getTime() > latestAllowed.getTime()) {
+        formError.value = 'Event cannot be more than 10 years away';
         return;
     }
 
@@ -126,7 +144,7 @@ watch(
 
                     <label class="event-field">
                         <span>Day / Time</span>
-                        <input v-model="eventTime" type="datetime-local" :min="minTime">
+                        <input v-model="eventTime" type="datetime-local" :min="minTime" :max="maxTime">
                     </label>
 
                     <p v-if="formError" class="event-form-error">{{ formError }}</p>

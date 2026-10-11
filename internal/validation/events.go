@@ -8,6 +8,8 @@ import (
 	"social/internal/models"
 )
 
+const MaxEventYearsAhead = 10
+
 func ValidateGroupEvent(event *models.NewGroupEvent) error {
 	if event.GroupID <= 0 {
 		return errors.New("invalid group")
@@ -40,6 +42,10 @@ func ValidateGroupEvent(event *models.NewGroupEvent) error {
 
 	if !eventTime.After(time.Now()) {
 		return errors.New("event cannot be in the past")
+	}
+
+	if eventTime.After(time.Now().AddDate(MaxEventYearsAhead, 0, 0)) {
+		return errors.New("event cannot be more than 10 years away")
 	}
 
 	return nil

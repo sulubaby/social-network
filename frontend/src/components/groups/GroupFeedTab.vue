@@ -54,6 +54,8 @@ defineProps({
 .posts-list {
     display: flex;
     flex-direction: column;
+    align-items: center;
     gap: 18px;
+    width: 100%;
 }
 </style>

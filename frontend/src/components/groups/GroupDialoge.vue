@@ -274,7 +274,7 @@ async function handleSubmit() {
                 </div>
 
                 <div v-else-if="currentSlide === 2" class="slide">
-                    <TagPeople v-model="post.taggedPeople" />
+                    <TagPeople v-model="post.taggedPeople" :group-id="groupId" />
 
                     <p v-if="validation.field === 'tags'" class="validation-error">
                         {{ validation.message }}

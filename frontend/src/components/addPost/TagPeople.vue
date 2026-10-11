@@ -2,7 +2,6 @@
 import { LIMITS } from '@/helpers/limits';
 import { getFriends } from '@/api/common/friends';
 import { getGroupMembers } from '@/api/posts/groups';
-import { activePage } from '@/data/chatState';
 import { addNotification } from '@/data/notifications';
 import { ref } from 'vue';
 
@@ -10,6 +9,10 @@ const props = defineProps({
     modelValue: {
         type: Array,
         default: () => []
+    },
+    groupId: {
+        type: [Number, String],
+        default: null
     }
 });
 
@@ -19,16 +22,14 @@ const search = ref('');
 const friends = ref([]);
 let timeout;
 
-function isGroupPage() {
-    return activePage.value?.startsWith('group:');
+function getCurrentGroupID() {
+    const id = Number(props.groupId);
+
+    return id > 0 ? id : null;
 }
 
-function getCurrentGroupID() {
-    if (!isGroupPage()) {
-        return null;
-    }
-
-    return Number(activePage.value.split(':')[1]);
+function isGroupPage() {
+    return getCurrentGroupID() !== null;
 }
 
 function handleSearchFriends() {
@@ -53,7 +54,7 @@ function handleSearchFriends() {
                     return;
                 }
 
-                result = await getGroupMembers(groupID, value);
+                result = await getGroupMembers(value, groupID);
             } else {
                 result = await getFriends(value);
             }
@@ -120,7 +121,7 @@ function removePerson(id) {
         </label>
 
         <label for="post-tag" style="font-size: 8px;">
-            You can only tag people you are friends with
+            {{ isGroupPage() ? 'You can only tag members of this group' : 'You can only tag people you are friends with' }}
         </label>
 
         <div class="tag-row">

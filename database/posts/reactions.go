@@ -6,41 +6,50 @@ import (
 )
 
 func InsertReaction(db *sql.DB, reaction models.Reaction) (error, bool) {
+	tx, err := db.Begin()
 
-	var currentValue int
-	err := db.QueryRow(`
-		SELECT value
-		FROM post_reactions
-		WHERE user_id = ? AND post_id = ?
-	`, reaction.UserID, reaction.PostID).Scan(&currentValue)
-
-	if err != nil && err != sql.ErrNoRows {
+	if err != nil {
 		return err, false
 	}
 
-	if reaction.Value == currentValue {
-		_, err := db.Exec(`
-			DELETE FROM post_reactions
-			WHERE post_id = ? AND user_id = ?
-		`, reaction.PostID, reaction.UserID)
+	defer tx.Rollback()
 
-		return err, true
-	}
+	result, err := tx.Exec(`
+		DELETE FROM post_reactions
+		WHERE post_id = ? AND user_id = ? AND value = ?
+	`, reaction.PostID, reaction.UserID, reaction.Value)
 
-	if err == sql.ErrNoRows {
-		_, err := db.Exec(`
-			INSERT INTO post_reactions (post_id, user_id, value)
-			VALUES (?, ?, ?)
-		`, reaction.PostID, reaction.UserID, reaction.Value)
-
+	if err != nil {
 		return err, false
 	}
 
-	_, err = db.Exec(`
-		UPDATE post_reactions
-		SET value = ?
-		WHERE user_id = ? AND post_id = ?
-	`, reaction.Value, reaction.UserID, reaction.PostID)
+	removed, err := result.RowsAffected()
 
-	return err, false
+	if err != nil {
+		return err, false
+	}
+
+	if removed > 0 {
+		if err := tx.Commit(); err != nil {
+			return err, false
+		}
+
+		return nil, true
+	}
+
+	_, err = tx.Exec(`
+		INSERT INTO post_reactions (post_id, user_id, value)
+		VALUES (?, ?, ?)
+		ON CONFLICT(post_id, user_id) DO UPDATE SET value = excluded.value
+	`, reaction.PostID, reaction.UserID, reaction.Value)
+
+	if err != nil {
+		return err, false
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err, false
+	}
+
+	return nil, false
 }

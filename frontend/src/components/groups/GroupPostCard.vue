@@ -184,6 +184,8 @@ function handleDislike() {
 .post-card {
     width: 100%;
     max-width: 720px;
+    margin-left: auto;
+    margin-right: auto;
     overflow: hidden;
     border: 2px solid var(--main-color);
     border-radius: 8px;

@@ -69,6 +69,8 @@ const currentReaction = ref(
     props.post.ReactionValue ?? 0
 );
 
+const reacting = ref(false);
+
 let observer = null;
 let flashTimer = null;
 let seen = false;
@@ -206,6 +208,12 @@ async function markSeen() {
 }
 
 async function react(value) {
+    if (reacting.value) {
+        return;
+    }
+
+    reacting.value = true;
+
     const previous = currentReaction.value;
 
     const next =
@@ -231,6 +239,8 @@ async function react(value) {
         );
 
         return;
+    } finally {
+        reacting.value = false;
     }
 
     if (previous === 1) {

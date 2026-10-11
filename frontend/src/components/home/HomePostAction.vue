@@ -47,6 +47,8 @@ const currentReaction = ref(props.reaction);
 
 const reactionAnimation = ref('');
 
+const reacting = ref(false);
+
 const showShare = ref(false);
 
 const loadingUsers = ref(false);
@@ -88,48 +90,60 @@ watch(showShare, (open) => {
 });
 
 async function handleReaction(value) {
-    const previousReaction = currentReaction.value;
-
-    const newReaction = previousReaction === value ? 0 : value;
-
-    const rect = new Reaction(value, props.postId);
-
-    const result = await postReaction(rect.getData());
-
-    if (!result.status) {
-        addNotification(result.message);
-
+    if (reacting.value) {
         return;
     }
 
-    currentReaction.value = newReaction;
+    reacting.value = true;
 
-    reactionAnimation.value = value === 1 ? 'like' : 'dislike';
+    try {
+        const previousReaction = currentReaction.value;
 
-    setTimeout(() => {
-        reactionAnimation.value = '';
-    }, 350);
+        const newReaction = previousReaction === value ? 0 : value;
 
-    if (previousReaction === 1) {
-        likeCount.value--;
-    }
+        const rect = new Reaction(value, props.postId);
 
-    if (previousReaction === -1) {
-        dislikeCount.value--;
-    }
+        const result = await postReaction(rect.getData());
 
-    if (newReaction === 1) {
-        likeCount.value++;
-    }
+        if (!result.status) {
+            addNotification(result.message);
 
-    if (newReaction === -1) {
-        dislikeCount.value++;
-    }
+            return;
+        }
 
-    if (newReaction === 1) {
-        emit('like');
-    } else {
-        emit('dislike');
+        currentReaction.value = newReaction;
+
+        reactionAnimation.value = value === 1 ? 'like' : 'dislike';
+
+        setTimeout(() => {
+            reactionAnimation.value = '';
+        }, 350);
+
+        if (previousReaction === 1) {
+            likeCount.value--;
+        }
+
+        if (previousReaction === -1) {
+            dislikeCount.value--;
+        }
+
+        if (newReaction === 1) {
+            likeCount.value++;
+        }
+
+        if (newReaction === -1) {
+            dislikeCount.value++;
+        }
+
+        if (newReaction === 1) {
+            emit('like');
+        } else {
+            emit('dislike');
+        }
+    } catch (err) {
+        addNotification(err.message || 'could not react');
+    } finally {
+        reacting.value = false;
     }
 }
 
