@@ -15,7 +15,7 @@ func GetPosts(db *sql.DB, groupID, userID, offset int) ([]models.Post, error) {
 		WHERE
 			group_id = ?
 		AND EXISTS (
-			SELECT 1 FROM groups_users WHERE user_id = ? AND group_id = ?
+			SELECT 1 FROM groups_users WHERE user_id = ? AND group_id = ? AND status = 1
 		)
 		ORDER BY created_at DESC
 		LIMIT 10

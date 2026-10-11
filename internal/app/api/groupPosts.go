@@ -156,7 +156,8 @@ func (app *App) AddGroupPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userIN, err := groups.UserIN(app.DB, groupID, userID)
+	// accepted members only, a pending invite or join request is not enough
+	userIN, err := groups.IsMember(app.DB, groupID, userID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			helpers.WriteJson(w, http.StatusBadRequest, map[string]any{
@@ -314,7 +315,8 @@ func (app *App) GetGroupPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userIN, err := groups.UserIN(app.DB, groupID, userID)
+	// accepted members only, a pending invite or join request is not enough
+	userIN, err := groups.IsMember(app.DB, groupID, userID)
 	if err != nil {
 		helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
 			"status":  false,

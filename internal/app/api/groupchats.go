@@ -252,7 +252,8 @@ func (app *App) AddMessages(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		userIN, err := groups.UserIN(app.DB, req.GroupID, userID)
+		// accepted members only, a pending invite or join request is not enough
+		userIN, err := groups.IsMember(app.DB, req.GroupID, userID)
 		if err != nil {
 			helpers.WriteJson(w, http.StatusBadRequest, map[string]any{
 				"status":  false,
