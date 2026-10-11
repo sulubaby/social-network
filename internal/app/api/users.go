@@ -343,7 +343,7 @@ func (app *App) UpdateUserAbout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	helpers.WriteJson(w, http.StatusOK, map[string]any{
-		"status":  false,
+		"status":  true,
 		"message": "user updated!",
 	})
 }

@@ -33,10 +33,12 @@ export async function updateAbout(data) {
         router.replace("/login");
         return;
     }
+    const result = await resp.json().catch(() => ({}));
+
+    // show what the server said (like a field that is too long), not a general error
     if (!resp.ok) {
-        throw new Error("could not update user data")
+        throw new Error(result.message || "could not update user data")
     }
 
-    const result = await resp.json();
     return result;
 }
