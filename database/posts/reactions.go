@@ -5,6 +5,7 @@ import (
 	"social/internal/models"
 )
 
+// InsertReaction toggles a like or dislike, returns true when it was removed
 func InsertReaction(db *sql.DB, reaction models.Reaction) (error, bool) {
 	tx, err := db.Begin()
 
@@ -14,6 +15,7 @@ func InsertReaction(db *sql.DB, reaction models.Reaction) (error, bool) {
 
 	defer tx.Rollback()
 
+	// same reaction again means the user wants to undo it
 	result, err := tx.Exec(`
 		DELETE FROM post_reactions
 		WHERE post_id = ? AND user_id = ? AND value = ?
@@ -37,6 +39,7 @@ func InsertReaction(db *sql.DB, reaction models.Reaction) (error, bool) {
 		return nil, true
 	}
 
+	// otherwise add it, or switch like to dislike with the upsert
 	_, err = tx.Exec(`
 		INSERT INTO post_reactions (post_id, user_id, value)
 		VALUES (?, ?, ?)

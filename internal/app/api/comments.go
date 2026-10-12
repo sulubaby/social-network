@@ -12,6 +12,7 @@ import (
 	"social/internal/validation"
 )
 
+// AddComment adds a comment or a reply, it can have an image or gif with it
 func (app *App) AddComment(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(int)
 
@@ -23,6 +24,7 @@ func (app *App) AddComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// the body can be json or a form with a file, readCommentInput handles both
 	input, err := readCommentInput(w, r)
 
 	if err != nil {
@@ -57,6 +59,7 @@ func (app *App) AddComment(w http.ResponseWriter, r *http.Request) {
 
 	comment.User.ID = userID
 
+	// a comment needs text or an image, and the text has a max length
 	if err := validation.ValidateComment(&comment, input.HasImage()); err != nil {
 		helpers.WriteJson(w, http.StatusBadRequest, map[string]any{
 			"status":  false,
@@ -74,6 +77,7 @@ func (app *App) AddComment(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// keep the path so we can delete the file if the insert fails
 	imagePath := comment.ImagePath
 
 	comment, err = posts.InsertComment(app.DB, comment)
@@ -90,6 +94,7 @@ func (app *App) AddComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// notify the post owner, or the comment owner if it is a reply
 	app.notifyComment(userID, comment)
 
 	helpers.WriteJson(w, http.StatusOK, map[string]any{
@@ -99,6 +104,7 @@ func (app *App) AddComment(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// DeleteComment removes a comment and all its replies, the comment owner or the post owner can do it
 func (app *App) DeleteComment(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(int)
 
@@ -144,6 +150,7 @@ func (app *App) DeleteComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// the rows are gone so remove their images from the disk too
 	for _, imagePath := range imagePaths {
 		helpers.RemoveCommentMedia(imagePath)
 	}
@@ -154,6 +161,7 @@ func (app *App) DeleteComment(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// GetComments gives the comments of a post, or the replies of one comment when replyTo is set
 func (app *App) GetComments(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(int)
 
@@ -216,6 +224,7 @@ func (app *App) GetComments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// send an empty list instead of null so the frontend can loop it
 	if comments == nil {
 		comments = []models.Comment{}
 	}
@@ -226,6 +235,7 @@ func (app *App) GetComments(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// VoteComment is like or dislike on a comment, vote is 1 or -1
 func (app *App) VoteComment(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(int)
 
@@ -289,6 +299,7 @@ func (app *App) VoteComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// only likes send a notification
 	if vote == 1 {
 		app.notifyCommentLike(userID, commentID)
 	}

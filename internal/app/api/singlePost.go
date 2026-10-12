@@ -11,6 +11,7 @@ import (
 	"social/internal/models"
 )
 
+// GetSinglePost gives one post, used when opening a post from a notification or a link
 func (app *App) GetSinglePost(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(int)
 

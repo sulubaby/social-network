@@ -16,6 +16,8 @@ type ValidationResult struct {
 	Message string `json:"message"`
 }
 
+// ValidatePost checks the new post before we save it
+// it returns the field that is wrong so the form can show the error under it
 func ValidatePost(data *models.RegsiterPost, image *multipart.FileHeader) ValidationResult {
 	data.Content = CleanText(data.Content)
 	data.Location = strings.TrimSpace(data.Location)
@@ -55,6 +57,7 @@ func ValidatePost(data *models.RegsiterPost, image *multipart.FileHeader) Valida
 		}
 	}
 
+	// -1 followers, 0 public, bigger is a list id (checked later in GroupExists)
 	if data.GroupID < -1 {
 		return ValidationResult{
 			Field:   "groupID",
@@ -62,6 +65,7 @@ func ValidatePost(data *models.RegsiterPost, image *multipart.FileHeader) Valida
 		}
 	}
 
+	// location is saved as "name:lat:lng"
 	if data.Location != "" {
 		locationParts := strings.Split(data.Location, ":")
 
@@ -100,6 +104,7 @@ func ValidatePost(data *models.RegsiterPost, image *multipart.FileHeader) Valida
 		}
 	}
 
+	// the media is optional, if there is one check the extension and the size
 	if image != nil {
 		allowedExtensions := map[string]bool{
 			".png":  true,
@@ -132,6 +137,7 @@ func ValidatePost(data *models.RegsiterPost, image *multipart.FileHeader) Valida
 			}
 		}
 
+		// videos can be max 60 seconds so we read the length from the file
 		if extension == ".mp4" {
 			file, err := image.Open()
 			if err != nil {
@@ -162,6 +168,8 @@ func ValidatePost(data *models.RegsiterPost, image *multipart.FileHeader) Valida
 	return ValidationResult{}
 }
 
+// getMP4Duration walks the boxes of the mp4 file until it finds moov, the length is inside it
+// every box starts with 4 bytes size and 4 bytes type
 func getMP4Duration(r io.ReaderAt) (float64, error) {
 	var offset int64
 
@@ -179,6 +187,7 @@ func getMP4Duration(r io.ReaderAt) (float64, error) {
 		headerSize := int64(8)
 		boxSize := int64(size)
 
+		// size 1 means the real size is in the next 8 bytes
 		if size == 1 {
 			extendedSize := make([]byte, 8)
 
@@ -216,6 +225,7 @@ func getMP4Duration(r io.ReaderAt) (float64, error) {
 	}
 }
 
+// findMP4Duration looks inside moov for the mvhd box, going into trak and mdia too
 func findMP4Duration(
 	r io.ReaderAt,
 	offset int64,
@@ -276,6 +286,8 @@ func findMP4Duration(
 	return 0, errors.New("mp4 duration not found")
 }
 
+// readMVHD reads timescale and duration, the length in seconds is duration / timescale
+// version 0 uses 32 bit numbers and version 1 uses 64 bit
 func readMVHD(
 	r io.ReaderAt,
 	offset int64,

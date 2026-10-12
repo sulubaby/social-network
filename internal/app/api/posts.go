@@ -17,6 +17,7 @@ import (
 	"social/internal/validation"
 )
 
+// AddPost makes a new post from the create post form (text, privacy, image or video, tags, location)
 func (app *App) AddPost(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(int)
 	if !ok {
@@ -27,6 +28,7 @@ func (app *App) AddPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// cap the body size so nobody can send a huge file and fill the server
 	r.Body = http.MaxBytesReader(w, r.Body, validation.MaxPostMediaSize+(1<<20))
 
 	if err := r.ParseMultipartForm(validation.MaxFormMemory); err != nil {
@@ -37,11 +39,13 @@ func (app *App) AddPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// everything comes as form values, if allowComments is missing we just allow comments
 	allowComments, err := strconv.Atoi(r.FormValue("allowComments"))
 	if err != nil {
 		allowComments = 1
 	}
 
+	// groupID is the privacy: 0 public, -1 followers only, bigger than 0 is a chosen list of followers
 	groupID, err := strconv.Atoi(r.FormValue("groupID"))
 	if err != nil {
 		groupID = 0
@@ -49,6 +53,7 @@ func (app *App) AddPost(w http.ResponseWriter, r *http.Request) {
 
 	var taggedPeople []int
 
+	// tagged people come as a json list of user ids
 	taggedPeopleData := r.FormValue("taggedPeople")
 
 	if taggedPeopleData != "" {
@@ -70,8 +75,10 @@ func (app *App) AddPost(w http.ResponseWriter, r *http.Request) {
 		PeopleTagged:  taggedPeople,
 	}
 
+	// the media is optional, so a missing file is fine and only other errors matter
 	file, header, err := r.FormFile("image")
 
+	// check the text, privacy and the file type before saving anything
 	res := validation.ValidatePost(&post, header)
 	if res.Field != "" {
 		helpers.WriteJson(w, http.StatusBadRequest, map[string]any{
@@ -85,6 +92,7 @@ func (app *App) AddPost(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		defer file.Close()
 
+		// save the image or video in uploads and keep its path for the db
 		imagePath, err := helpers.SaveUploads(file, header, "post")
 		if err != nil {
 		if errors.Is(err, helpers.ErrUploadType) {
@@ -110,6 +118,7 @@ func (app *App) AddPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// a chosen list of followers has to exist and belong to this user
 	if err := posts.GroupExists(app.DB, post.GroupID, userID); err != nil {
 		if err == sql.ErrNoRows {
 			helpers.WriteJson(w, http.StatusBadRequest, map[string]any{
@@ -136,6 +145,7 @@ func (app *App) AddPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// send notifications to tagged and mentioned people, the map stops someone getting two
 	actorName := app.actorName(userID)
 	notified := map[int]bool{userID: true}
 
@@ -154,6 +164,7 @@ func (app *App) AddPost(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	// @mentions in the text get their own notification
 	for _, mentionedID := range app.mentionedUserIDs(post.Content, notified) {
 		notified[mentionedID] = true
 
@@ -171,6 +182,7 @@ func (app *App) AddPost(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// GetHomePosts gives the main feed, or only the videos when type=videos
 func (app *App) GetHomePosts(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(int)
 
@@ -198,6 +210,7 @@ func (app *App) GetHomePosts(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// the videos tab uses offset and limit paging, limit is capped at 50
 	if r.URL.Query().Get("type") == "videos" {
 		limit := 5
 
@@ -249,6 +262,7 @@ func (app *App) GetHomePosts(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// normal feed, the query skips posts the user already has on screen
 	homePosts, err := posts.GetHomePosts(app.DB, userID, shownIDs)
 
 	if err != nil {
@@ -260,6 +274,7 @@ func (app *App) GetHomePosts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// adds how i am connected to each author so the card shows the right follow button
 	posts.FillRelationships(app.DB, userID, homePosts)
 
 	helpers.WriteJson(w, http.StatusOK, map[string]any{
@@ -268,6 +283,7 @@ func (app *App) GetHomePosts(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// PostReaction is the like and dislike button, 1 is like and -1 is dislike
 func (app *App) PostReaction(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(int)
 	if !ok {
@@ -302,6 +318,7 @@ func (app *App) PostReaction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rect.UserID = userID
+	// pressing the same reaction again removes it, then deletion is true and we dont notify
 	err, deletion := posts.InsertReaction(app.DB, rect)
 	if err != nil {
 
@@ -320,6 +337,7 @@ func (app *App) PostReaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// tell the post owner who liked or disliked it
 	targetID, err := posts.GetPostOwnerID(app.DB, rect.PostID)
 	if err != nil {
 		log.Println("could not find post owner:", err)
@@ -348,6 +366,7 @@ func (app *App) PostReaction(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// GetUserPosts gives the posts on a profile, targetID is whose profile, empty means my own
 func (app *App) GetUserPosts(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(int)
 
@@ -418,6 +437,7 @@ func (app *App) GetUserPosts(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// the profile has tabs for all posts, videos and tagged posts
 	postType := r.URL.Query().Get("type")
 	videosOnly := postType == "videos"
 
@@ -447,6 +467,7 @@ func (app *App) GetUserPosts(w http.ResponseWriter, r *http.Request) {
 
 	hasMore := len(userPosts) == limit
 
+	// when looking at someone else, drop the posts their privacy hides from me
 	if targetID != userID {
 		log.Println("need filtering")
 		userPosts, err = posts.FilterPosts(app.DB, &userPosts, userID, targetID)
@@ -470,6 +491,7 @@ func (app *App) GetUserPosts(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// DeletePost only works for the owner, the query returns no rows otherwise
 func (app *App) DeletePost(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(int)
 	if !ok {
@@ -514,6 +536,7 @@ func (app *App) DeletePost(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ViewPost saves that the user saw a post, used for the view count
 func (app *App) ViewPost(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(int)
 	if !ok {
@@ -539,6 +562,7 @@ func (app *App) ViewPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// seeing the same post twice hits the unique rule, that is not a real error
 	if err := posts.ViewPost(app.DB, postID, userID); err != nil && err.Error() != "UNIQUE constraint failed: post_views.user_id, post_views.post_id" {
 		helpers.WriteJson(w, http.StatusInternalServerError, map[string]any{
 			"status":  false,
@@ -553,8 +577,10 @@ func (app *App) ViewPost(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// writeTaggedPosts sends the posts someone was tagged in
 func (app *App) writeTaggedPosts(w http.ResponseWriter, userID, targetID, offset, limit int) {
 	if targetID != userID {
+		// private profile and i dont follow them, so i get an empty list
 		isPrivate, err := posts.IsPrivateProfile(app.DB, targetID)
 		if err != nil {
 			log.Println(err)
@@ -599,6 +625,7 @@ func (app *App) writeTaggedPosts(w http.ResponseWriter, userID, targetID, offset
 
 	hasMore := len(taggedPosts) == limit
 
+	// the posts are from other people so their privacy has to be checked too
 	visiblePosts, err := posts.FilterTaggedPosts(app.DB, taggedPosts, userID, targetID)
 	if err != nil {
 		log.Println(err)

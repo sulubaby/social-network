@@ -10,6 +10,7 @@ import (
 	"strings"
 )
 
+// AddPost saves a new post and its tagged people, returns the new post id
 func AddPost(db *sql.DB, post models.RegsiterPost) (int, error) {
 	var groupID interface{}
 	public := 0
@@ -17,6 +18,7 @@ func AddPost(db *sql.DB, post models.RegsiterPost) (int, error) {
 
 	log.Println("groupID", post.GroupID)
 
+	// turn the privacy choice into columns: a list id, private (followers) or public
 	if post.GroupID > 0 {
 		var exists int
 
@@ -40,6 +42,7 @@ func AddPost(db *sql.DB, post models.RegsiterPost) (int, error) {
 		public = 1
 	}
 
+	// transaction so the post and its tags get saved together or not at all
 	tx, err := db.Begin()
 	if err != nil {
 		return 0, err
@@ -90,6 +93,7 @@ func AddPost(db *sql.DB, post models.RegsiterPost) (int, error) {
 	return int(id), nil
 }
 
+// GroupExists checks the chosen followers list belongs to the user, 0 and -1 are not lists so they pass
 func GroupExists(db *sql.DB, groupID, userID int) error {
 	if groupID == 0 || groupID == -1 {
 		return nil
@@ -107,6 +111,7 @@ func GroupExists(db *sql.DB, groupID, userID int) error {
 func GetHomePosts(db *sql.DB, userID int, shownIDs []int) ([]models.Post, error) {
 	var posts []models.Post
 
+	// the feed is built from a few queries, seen stops the same post showing twice
 	seen := make(map[int]bool)
 	appendPosts := func(rows *sql.Rows) error {
 		defer rows.Close()
@@ -154,6 +159,7 @@ func GetHomePosts(db *sql.DB, userID int, shownIDs []int) ([]models.Post, error)
 		return rows.Err()
 	}
 
+	// skip posts already on the page and the ones we already picked in this request
 	excludeClause := func() (string, []interface{}) {
 		if len(posts) == 0 && len(shownIDs) == 0 {
 			return "", nil
@@ -191,6 +197,7 @@ func GetHomePosts(db *sql.DB, userID int, shownIDs []int) ([]models.Post, error)
 		return strings.Join(placeholders, ","), args
 	}
 
+	// friends are people we follow and who follow us back
 	getFriendIDs := func() ([]int, error) {
 		rows, err := db.Query(`
 			SELECT uf1.target_id
@@ -224,6 +231,7 @@ func GetHomePosts(db *sql.DB, userID int, shownIDs []int) ([]models.Post, error)
 		return ids, rows.Err()
 	}
 
+	// people i follow that are not friends
 	getFollowingIDs := func(excludeIDs []int) ([]int, error) {
 		exClause := "0"
 		args := []interface{}{userID}
@@ -263,6 +271,7 @@ func GetHomePosts(db *sql.DB, userID int, shownIDs []int) ([]models.Post, error)
 		return ids, rows.Err()
 	}
 
+	// posts where the author put me on their chosen list
 	runGroupsQuery := func(unviewedOnly bool, limit int) error {
 		if limit <= 0 {
 			return nil
@@ -342,6 +351,7 @@ func GetHomePosts(db *sql.DB, userID int, shownIDs []int) ([]models.Post, error)
 		return appendPosts(rows)
 	}
 
+	// posts from a set of users, followers only posts are added when includePrivate is true
 	runUserPostsQuery := func(userIDs []int, includePrivate bool, unviewedOnly bool, limit int) error {
 		if len(userIDs) == 0 || limit <= 0 {
 			return nil
@@ -431,6 +441,7 @@ func GetHomePosts(db *sql.DB, userID int, shownIDs []int) ([]models.Post, error)
 		return appendPosts(rows)
 	}
 
+	// public posts from people i dont follow so the feed is not empty
 	runRandomQuery := func(excludeUserIDs []int, unviewedOnly bool, limit int) error {
 		if limit <= 0 {
 			return nil
@@ -526,6 +537,8 @@ func GetHomePosts(db *sql.DB, userID int, shownIDs []int) ([]models.Post, error)
 		return nil, err
 	}
 
+	// fill the feed in order: lists, friends, following, then others, unseen posts first
+	// max 13 posts for each load
 	if err := runGroupsQuery(true, 5); err != nil {
 		return nil, err
 	}
@@ -581,6 +594,7 @@ func GetHomePosts(db *sql.DB, userID int, shownIDs []int) ([]models.Post, error)
 		}
 	}
 
+	// not enough unseen posts, so fill the rest with ones already seen
 	if len(posts) < 13 {
 		remaining := 13 - len(posts)
 
@@ -643,6 +657,7 @@ func GetHomePosts(db *sql.DB, userID int, shownIDs []int) ([]models.Post, error)
 	return posts, nil
 }
 
+// GetHomeVideos gives mp4 posts for the videos tab: lists i am on, public posts and followers posts of people i follow
 func GetHomeVideos(db *sql.DB, userID, offset, limit int) ([]models.Post, error) {
 	rows, err := db.Query(`
 		SELECT
@@ -760,6 +775,7 @@ func GetHomeVideos(db *sql.DB, userID, offset, limit int) ([]models.Post, error)
 	return videos, nil
 }
 
+// attachGroupOwnerNames adds the name of who made the list, so the card can show it was shared with me
 func attachGroupOwnerNames(db *sql.DB, posts []models.Post) error {
 	groupIDSet := make(map[int]bool)
 	for _, p := range posts {
@@ -816,6 +832,7 @@ func attachGroupOwnerNames(db *sql.DB, posts []models.Post) error {
 	return nil
 }
 
+// attachTaggedPeople loads the people tagged on each post with their name and avatar
 func attachTaggedPeople(db *sql.DB, posts *[]models.Post) error {
 	for i := range *posts {
 		p := &(*posts)[i]
@@ -865,6 +882,7 @@ func attachTaggedPeople(db *sql.DB, posts *[]models.Post) error {
 	return nil
 }
 
+// GetUserPosts gives the posts of one profile, privacy is checked after in FilterPosts
 func GetUserPosts(db *sql.DB, targetID, offset, limit int, videosOnly bool) ([]models.Post, error) {
 	var posts []models.Post
 
@@ -946,6 +964,7 @@ func GetUserPosts(db *sql.DB, targetID, offset, limit int, videosOnly bool) ([]m
 
 		p.AvatarPath = avatar
 
+		// posts for a list show the list name on my own profile
 		if p.GroupId != nil && *p.GroupId > 0 {
 			var groupName string
 
@@ -976,6 +995,7 @@ func GetUserPosts(db *sql.DB, targetID, offset, limit int, videosOnly bool) ([]m
 	return posts, nil
 }
 
+// DeletePost deletes only if the user owns the post, no rows means not allowed
 func DeletePost(db *sql.DB, postID, userID int) error {
 	result, err := db.Exec(`
 		DELETE FROM posts
@@ -999,6 +1019,7 @@ func DeletePost(db *sql.DB, postID, userID int) error {
 	return nil
 }
 
+// ViewPost marks a post as seen so the feed can show new posts first
 func ViewPost(db *sql.DB, postID, userID int) error {
 	_, err := db.Exec(`
 		INSERT INTO post_views (user_id, post_id)

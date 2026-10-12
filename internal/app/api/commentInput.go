@@ -15,6 +15,7 @@ import (
 var errInvalidComment = errors.New("invalid comment")
 var errInvalidCommentForm = errors.New("invalid form data or image is too large")
 
+// commentInput holds what we read from the comment request, plus the file if there is one
 type commentInput struct {
 	PostID  int
 	Content string
@@ -24,6 +25,7 @@ type commentInput struct {
 	header  *multipart.FileHeader
 }
 
+// readCommentInput reads a comment that came as json (text only) or as a form (text and image)
 func readCommentInput(w http.ResponseWriter, r *http.Request) (*commentInput, error) {
 	if !strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
 		r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
@@ -45,6 +47,7 @@ func readCommentInput(w http.ResponseWriter, r *http.Request) (*commentInput, er
 		}, nil
 	}
 
+	// form with a file, same size limit as chat media
 	r.Body = http.MaxBytesReader(w, r.Body, helpers.MaxChatMediaSize+(1<<20))
 
 	if err := r.ParseMultipartForm(helpers.MaxChatMediaSize); err != nil {
@@ -76,6 +79,7 @@ func readCommentInput(w http.ResponseWriter, r *http.Request) (*commentInput, er
 		input.ReplyTo = &replyTo
 	}
 
+	// no image is fine, any other error means the form is broken
 	file, header, err := r.FormFile("image")
 
 	if err == nil {
@@ -97,6 +101,7 @@ func (c *commentInput) SaveImage() (string, error) {
 	return helpers.SaveCommentMedia(c.file, c.header)
 }
 
+// Close frees the file and the temp files the form made
 func (c *commentInput) Close() {
 	if c.file != nil {
 		c.file.Close()
@@ -107,6 +112,7 @@ func (c *commentInput) Close() {
 	}
 }
 
+// writeCommentMediaError sends 400 for a bad file and 500 for a server problem
 func writeCommentMediaError(w http.ResponseWriter, err error) {
 	status := http.StatusInternalServerError
 	message := "could not save image"

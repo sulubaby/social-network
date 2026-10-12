@@ -33,6 +33,7 @@ var imageTypes = map[string]string{
 	"image/gif":  ".gif",
 }
 
+// comments and chats also accept webp
 var chatMediaTypes = map[string]string{
 	"image/jpeg": ".jpg",
 	"image/png":  ".png",
@@ -40,6 +41,7 @@ var chatMediaTypes = map[string]string{
 	"image/webp": ".webp",
 }
 
+// SaveUploads saves a post media or an avatar with a random name and returns the path we keep in the db
 func SaveUploads(file multipart.File, header *multipart.FileHeader, Type string) (string, error) {
 	var path string
 
@@ -68,6 +70,7 @@ func SaveUploads(file multipart.File, header *multipart.FileHeader, Type string)
 	contentType := http.DetectContentType(buffer[:n])
 
 	extension, ok := imageTypes[contentType]
+	// only posts can be videos
 	if !ok && Type == "post" && contentType == "video/mp4" {
 		extension, ok = ".mp4", true
 	}
@@ -75,6 +78,7 @@ func SaveUploads(file multipart.File, header *multipart.FileHeader, Type string)
 		return "", ErrUploadType
 	}
 
+	// go back to the start because we already read 512 bytes
 	if _, err := file.Seek(0, io.SeekStart); err != nil {
 		return "", err
 	}
@@ -112,11 +116,13 @@ func SaveChatMedia(file multipart.File, header *multipart.FileHeader) (string, s
 	return saveMedia(file, header, CHATS_PATH, "chats/")
 }
 
+// SaveCommentMedia is for the image or gif on a comment, it uses the same rules as chat media
 func SaveCommentMedia(file multipart.File, header *multipart.FileHeader) (string, error) {
 	path, _, err := saveMedia(file, header, COMMENTS_PATH, "comments/")
 	return path, err
 }
 
+// RemoveCommentMedia deletes the file of a deleted comment, the prefix check stops deleting other files
 func RemoveCommentMedia(path string) {
 	if !strings.HasPrefix(path, "comments/") {
 		return
@@ -129,6 +135,7 @@ func RemoveCommentMedia(path string) {
 	}
 }
 
+// saveMedia checks size and real type, saves the file and says if it is an image or a gif
 func saveMedia(file multipart.File, header *multipart.FileHeader, dir, prefix string) (string, string, error) {
 	if header.Size > MaxChatMediaSize {
 		return "", "", ErrChatMediaTooLarge
@@ -164,6 +171,7 @@ func saveMedia(file multipart.File, header *multipart.FileHeader, dir, prefix st
 		return "", "", err
 	}
 
+	// copy one byte more than the limit, so we know when the file was too big and remove it
 	written, err := io.Copy(dst, io.LimitReader(file, MaxChatMediaSize+1))
 	closeErr := dst.Close()
 

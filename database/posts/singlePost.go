@@ -5,6 +5,7 @@ import (
 	"social/internal/models"
 )
 
+// GetSinglePost loads one post with my reaction on it, the handler already checked i can see it
 func GetSinglePost(db *sql.DB, postID, userID int) (models.Post, error) {
 	var post models.Post
 	var username sql.NullString

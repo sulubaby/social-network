@@ -5,6 +5,7 @@ import (
 	"social/internal/models"
 )
 
+// GetTaggedPosts gives posts where targetID was tagged, newest first
 func GetTaggedPosts(db *sql.DB, targetID, offset, limit int) ([]models.Post, error) {
 	rows, err := db.Query(`
 		SELECT
@@ -107,6 +108,8 @@ func GetTaggedPosts(db *sql.DB, targetID, offset, limit int) ([]models.Post, err
 	return posts, nil
 }
 
+// FilterTaggedPosts checks each post with its own author privacy
+// the owner of the profile, the author and tagged people always see it
 func FilterTaggedPosts(db *sql.DB, posts []models.Post, viewerID, targetID int) ([]models.Post, error) {
 	visiblePosts := []models.Post{}
 
@@ -137,6 +140,7 @@ func isTaggedUser(p models.Post, userID int) bool {
 	return false
 }
 
+// no profile row means it is not private
 func IsPrivateProfile(db *sql.DB, userID int) (bool, error) {
 	var isPrivate int
 

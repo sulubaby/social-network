@@ -5,6 +5,7 @@ import (
 	"social/internal/models"
 )
 
+// InsertComment saves the comment then reads back the time and the user info, so the frontend can show it right away
 func InsertComment(db *sql.DB, comment models.Comment) (models.Comment, error) {
 	result, err := db.Exec(`
 		INSERT INTO comments (user_id, post_id, content, reply_to, image_path)
@@ -54,6 +55,8 @@ func InsertComment(db *sql.DB, comment models.Comment) (models.Comment, error) {
 	return comment, nil
 }
 
+// GetComments gives top level comments when replyTo is 0, otherwise the replies of that comment
+// each row also has my own vote and how many replies it has
 func GetComments(db *sql.DB, postID, replyTo, limit, offset, userID int, orderBy string) ([]models.Comment, error) {
 	queryOrderBy := "c.created_at DESC"
 
@@ -184,6 +187,8 @@ func GetComments(db *sql.DB, postID, replyTo, limit, offset, userID int, orderBy
 	return comments, nil
 }
 
+// DeleteComment can be done by the comment owner or the post owner
+// first collect the images of the comment and all replies under it, so the handler can delete the files
 func DeleteComment(db *sql.DB, commentID, userID int) ([]string, error) {
 	imageRows, err := db.Query(`
 		WITH RECURSIVE tree(id) AS (
@@ -221,6 +226,7 @@ func DeleteComment(db *sql.DB, commentID, userID int) ([]string, error) {
 
 	imageRows.Close()
 
+	// deleting the top comment is enough, the replies go with it
 	result, err := db.Exec(`
 		DELETE FROM comments
 		WHERE id = ?
@@ -243,6 +249,7 @@ func DeleteComment(db *sql.DB, commentID, userID int) ([]string, error) {
 	return imagePaths, nil
 }
 
+// VoteComment works like the like button: new vote adds, same vote again removes it, the other vote switches it
 func VoteComment(db *sql.DB, commentID, userID, vote int) error {
 	tx, err := db.Begin()
 

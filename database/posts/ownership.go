@@ -2,6 +2,7 @@ package posts
 
 import "database/sql"
 
+// small lookups used by the handlers, mostly to know who to notify
 func GetPostOwnerID(db *sql.DB, postID int) (int, error) {
 	var ID int
 	err := db.QueryRow(`
@@ -21,6 +22,7 @@ func GetPostImage(db *sql.DB, postID int) (string, error) {
 	return imagePath.String, err
 }
 
+// GetCommentOwner returns the owner and the post of a comment
 func GetCommentOwner(db *sql.DB, commentID int) (int, int, error) {
 	var ownerID, postID int
 

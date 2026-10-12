@@ -10,6 +10,7 @@ import (
 	"strings"
 )
 
+// FilterPosts keeps only the posts of targetID that userID is allowed to see on their profile
 func FilterPosts(db *sql.DB, posts *[]models.Post, userID, targetID int) ([]models.Post, error) {
 	var returnPosts []models.Post
 
@@ -27,6 +28,7 @@ func FilterPosts(db *sql.DB, posts *[]models.Post, userID, targetID int) ([]mode
 		}
 	}
 
+	// old rows have no group_id and use the public and private columns
 	for _, p := range *posts {
 		if p.GroupId == nil {
 			if p.Public == 1 {
@@ -50,6 +52,7 @@ func FilterPosts(db *sql.DB, posts *[]models.Post, userID, targetID int) ([]mode
 
 		groupID := *p.GroupId
 
+		// 0 is public
 		if groupID == 0 {
 			returnPosts = append(returnPosts, p)
 			continue
@@ -72,6 +75,7 @@ func FilterPosts(db *sql.DB, posts *[]models.Post, userID, targetID int) ([]mode
 			continue
 		}
 
+		// anything else is a chosen list, users are saved like "1:5:9"
 		log.Println("group post")
 		var users string
 

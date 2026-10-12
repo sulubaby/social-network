@@ -1,5 +1,6 @@
 package models
 
+// RegsiterPost is what the create post form sends
 type RegsiterPost struct {
 	UserID        int
 	GroupID       int    `json:"groupID"`
@@ -17,6 +18,7 @@ type TaggedPerson struct {
 	AvatarPath string `json:"avatarPath"`
 }
 
+// Post is one post card in the feed or on a profile
 type Post struct {
 	Public         int
 	Private        int
@@ -33,6 +35,7 @@ type Post struct {
 	GroupId        *int    `json:"groupId"`
 	GroupName      string
 	CreatedAt      string         `json:"createdAt"`
+	// how i am connected to the author, used for the follow button
 	Relationship   string         `json:"relationship"`
 	Visibility     string         `json:"visibility"`
 	VisibilityUser string         `json:"visibilityUser"`
@@ -40,9 +43,11 @@ type Post struct {
 	LikeCount      int            `json:"likeCount"`
 	DisLikeCount   int            `json:"disLikeCount"`
 	CommentCount   int            `json:"commentCount"`
+	// my own reaction, 1 like, -1 dislike, 0 nothing
 	ReactionValue  int
 }
 
+// Comment is a comment or a reply, RepltTo is the parent comment id
 type Comment struct {
 	ID        int              `json:"id"`
 	Content   string           `json:"content"`
