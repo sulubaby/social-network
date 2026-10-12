@@ -6,6 +6,7 @@ import { postReaction } from '@/api/posts/actions';
 import { Reaction } from '@/models/posts';
 import { addNotification } from '@/data/notifications';
 
+// NotificationPostDialog opens a post on top of the page, it reuses the normal post card
 const props = defineProps({
     show: {
         type: Boolean,
@@ -25,6 +26,7 @@ const loadingPost = ref(false);
 const loadError = ref('');
 const reacting = ref(false);
 
+// loadRequestID ignores an old load if another post was opened before it finished
 let loadRequestID = 0;
 
 function reactionLabel(value) {
@@ -33,6 +35,7 @@ function reactionLabel(value) {
     return '';
 }
 
+// turn the server post into the props HomePosts expects
 function normalizePost(data) {
     if (!data) return null;
 
@@ -89,6 +92,7 @@ async function loadPost() {
     }
 }
 
+// change the like or dislike on screen first, then go back to the old numbers if the request fails
 async function applyReaction(value) {
     if (!post.value || reacting.value) return;
 
@@ -157,6 +161,7 @@ function closeDialog() {
 }
 
 watch(
+    // load the post when the dialog opens, clear it when it closes
     () => [props.show, props.postId],
     ([visible]) => {
         if (visible) {

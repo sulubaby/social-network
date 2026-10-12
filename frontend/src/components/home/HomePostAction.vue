@@ -7,6 +7,7 @@ import { searchShares } from '@/api/search/search';
 import { addNotification } from '@/data/notifications';
 import { Reaction } from '@/models/posts';
 
+// HomePostAction is the row of buttons under a post: like, dislike, comment and share
 const props = defineProps({
     allowComments: {
         type: Boolean
@@ -39,6 +40,7 @@ const MAX_SHARE_USERS = 30;
 
 const SEARCH_DELAY = 300;
 
+// local copies so the numbers change right away without loading the post again
 const likeCount = ref(props.likes);
 
 const dislikeCount = ref(props.dislikes);
@@ -67,6 +69,7 @@ const hasSelection = computed(() => selectedUserIds.value.length > 0);
 
 let searchTimer = null;
 
+// requestId makes sure only the answer of the last search is shown
 let requestId = 0;
 
 watch(() => props.likes, (value) => {
@@ -89,6 +92,7 @@ watch(showShare, (open) => {
     }
 });
 
+// handleReaction sends the like or dislike, pressing the same one again removes it
 async function handleReaction(value) {
     if (reacting.value) {
         return;
@@ -119,6 +123,7 @@ async function handleReaction(value) {
             reactionAnimation.value = '';
         }, 350);
 
+        // take the old reaction off the counts and add the new one
         if (previousReaction === 1) {
             likeCount.value--;
         }
@@ -151,6 +156,7 @@ function toggleComments() {
     emit('toggle-comments');
 }
 
+// loadUsers gets the people i can share the post with, filtered by the search text
 async function loadUsers(query) {
     requestId++;
 
@@ -184,6 +190,7 @@ function isSelected(userId) {
     return selectedUserIds.value.includes(userId);
 }
 
+// select or unselect a person in the share list
 function toggleUser(userId) {
     if (sharing.value) {
         return;
@@ -198,6 +205,7 @@ function toggleUser(userId) {
     selectedUserIds.value = [...selectedUserIds.value, userId];
 }
 
+// submitShare sends the post as a chat message to everyone selected
 async function submitShare() {
     if (!hasSelection.value || sharing.value) {
         return;
@@ -240,6 +248,7 @@ async function submitShare() {
     }
 }
 
+// handleShare opens the share dialog fresh and focuses the search box
 async function handleShare() {
     showShare.value = true;
     searchQuery.value = '';
@@ -255,6 +264,7 @@ async function handleShare() {
     await loadUsers('');
 }
 
+// wait until the user stops typing before searching
 function onSearchInput() {
     clearTimeout(searchTimer);
 
@@ -312,6 +322,7 @@ onBeforeUnmount(() => {
             Dislike {{ dislikeCount }}
         </button>
 
+        <!-- no comment button when the author turned comments off -->
         <button v-if="props.allowComments" class="action-button" type="button" @click="toggleComments">
             <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9.6 9.6 0 0 1-4-.9L3 21l1.5-4.2A8.5 8.5 0 0 1 21 11.5Z" />
@@ -329,6 +340,7 @@ onBeforeUnmount(() => {
         </button>
     </div>
 
+    <!-- the share dialog goes on the body so it covers the whole page -->
     <Teleport to="body">
         <div v-if="showShare" class="share-overlay" @click.self="closeShare">
             <div class="share-dialog" role="dialog" aria-modal="true" aria-label="Share post">

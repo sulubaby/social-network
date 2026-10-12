@@ -3,6 +3,7 @@
 import { LIMITS } from '@/helpers/limits';
 import { ref, watch, onBeforeUnmount } from 'vue';
 
+// ImageContainer is where the user picks the image, gif or video of the post and sees a preview
 const props = defineProps({
     modelValue: {
         type: File,
@@ -22,6 +23,7 @@ function openFilePicker() {
     fileInput.value?.click();
 }
 
+// createVideoThumbnail draws the first frame of the video on a canvas to use as the preview picture
 function createVideoThumbnail(file) {
     return new Promise((resolve, reject) => {
         const video = document.createElement('video');
@@ -32,6 +34,7 @@ function createVideoThumbnail(file) {
         video.playsInline = true;
         video.preload = 'metadata';
 
+        // jump a tiny bit in so the frame is not black
         video.addEventListener('loadeddata', () => {
             video.currentTime = 0.1;
         });
@@ -81,6 +84,7 @@ function createVideoThumbnail(file) {
     });
 }
 
+// check the type, extension and size before using the file, a bad file is just ignored
 async function handleFileChange(event) {
     const file = event.target.files?.[0];
 
@@ -155,6 +159,7 @@ function stopVideo() {
     isPlaying.value = false;
 }
 
+// free the old preview urls so they dont stay in memory
 function cleanupPreview() {
     if (preview.value) {
         URL.revokeObjectURL(preview.value);
@@ -181,6 +186,7 @@ function removeImage() {
 }
 
 watch(
+    // if the parent clears the file, clear the preview too
     () => props.modelValue,
     file => {
         if (!file) {

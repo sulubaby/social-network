@@ -11,8 +11,10 @@ import { markNotificationRead } from '@/api/common/notifications';
 import { setUnreadNotificationCount } from '@/data/notificationCount';
 import { useRouter } from 'vue-router';
 
+// NotificationContainer shows the popups in the corner of every page
 const router = useRouter();
 
+// clicking a popup marks that notification as read and updates the bell
 async function markToastRead(notification) {
     if (!notification.notificationId) {
         return;
@@ -29,6 +31,7 @@ async function markToastRead(notification) {
     }
 }
 
+// a popup opens its post in a dialog, or goes to its page, then closes
 function openToast(notification) {
     if (notification.postId) {
         openPostDialog(notification.postId);
@@ -44,6 +47,7 @@ function openToast(notification) {
 </script>
     
 <template>
+    <!-- one popup for each notification in the list, the x closes it without opening -->
     <div class="notification-container">
         <div
             v-for="notification in notifications"

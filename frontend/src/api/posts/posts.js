@@ -1,3 +1,4 @@
+// addPost sends the new post as form data because it can have a file
 export async function addPost(post = {}, image = null) {
     const formData = new FormData();
 
@@ -11,6 +12,7 @@ export async function addPost(post = {}, image = null) {
         JSON.stringify(post.taggedPeople || [])
     );
 
+    // the image or video is optional
     if (image) {
         formData.append('image', image);
     }
@@ -28,6 +30,7 @@ export async function addPost(post = {}, image = null) {
     return await resp.json();
 }
 
+// getUserPosts loads the posts of a profile page by page, type can be videos or tagged
 export async function getUserPosts(userID = "", offset = 0, limit = 9, type = "") {
     const params = new URLSearchParams({
         offset: String(offset),
@@ -52,6 +55,7 @@ export async function getUserPosts(userID = "", offset = 0, limit = 9, type = ""
     return result;
 }
 
+// getHomeVideos loads the videos tab of the home page
 export async function getHomeVideos(offset = 0, limit = 5) {
     const params = new URLSearchParams({
         type: 'videos',
@@ -73,6 +77,7 @@ export async function getHomeVideos(offset = 0, limit = 5) {
     return result;
 }
 
+// deletePost removes my post
 export async function deletePost(postID) {
     const resp = await fetch(`/api/post?postId=${postID}`, {
         method: 'DELETE',
@@ -88,6 +93,7 @@ export async function deletePost(postID) {
     return result;
 }
 
+// viewPost tells the server i saw this post so the feed shows newer ones first next time
 export async function viewPost(postID) {
     const resp = await fetch('/api/posts/seen', {
         method: 'POST',

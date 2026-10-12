@@ -1,3 +1,4 @@
+// getSinglePost loads one post, used when a notification opens a post
 export async function getSinglePost(postID) {
     const params = new URLSearchParams({
         postID: String(postID)

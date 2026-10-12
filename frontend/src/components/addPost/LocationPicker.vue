@@ -4,6 +4,7 @@ import { getSuggestedLocations } from '@/api/common/location';
 import { getLocationData } from '@/helpers/common/locationHelpers';
 import { onBeforeUnmount, ref } from 'vue';
 
+// LocationPicker searches places and saves the chosen one as "name:lat:lng"
 defineProps({
     modelValue: {
         type: String,
@@ -26,6 +27,7 @@ const open = ref(false);
 const activeIndex = ref(-1);
 
 let searchTimeout = null;
+// requestNumber makes sure an old search that answers late is ignored
 let requestNumber = 0;
 
 function resetResults() {
@@ -36,6 +38,7 @@ function resetResults() {
     loading.value = false;
 }
 
+// start searching after 2 letters and when the user stops typing
 function handleLocationSearch() {
     clearTimeout(searchTimeout);
 
@@ -87,6 +90,7 @@ function handleLocationSearch() {
     }, SEARCH_DEBOUNCE);
 }
 
+// picking a suggestion puts it in the box, the add button saves it
 function selectLocation(location) {
     clearTimeout(searchTimeout);
 
@@ -101,6 +105,7 @@ function selectLocation(location) {
     open.value = false;
 }
 
+// save the place with its coordinates so the post can show it on a map
 function addLocation() {
     if (!selectedLocation.value) {
         return;
@@ -132,6 +137,7 @@ function closeSuggestions() {
     open.value = false;
 }
 
+// arrow keys move in the suggestions, enter picks, escape closes
 function handleKeydown(event) {
     if (event.key === 'ArrowDown' && open.value && locations.value.length) {
         event.preventDefault();

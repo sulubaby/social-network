@@ -4,10 +4,13 @@ import { getUnreadNotificationCount } from '@/api/common/notifications';
 import { addNotification } from './notifications';
 import { messageSent } from './chatState';
 
+// the bell number, shared by every component that shows it
 export const unreadNotificationCount = ref(0);
 
+// countVersion goes up on every change so an old fetch that comes back late cannot overwrite a newer count
 let countVersion = 0;
 
+// refreshUnreadNotificationCount asks the server for the real count
 export async function refreshUnreadNotificationCount() {
     const version = ++countVersion;
 
@@ -24,6 +27,7 @@ export async function refreshUnreadNotificationCount() {
     }
 }
 
+// the functions below change the count locally, for example when the websocket sends a new one
 export function setUnreadNotificationCount(count) {
     countVersion++;
     unreadNotificationCount.value = Math.max(0, Number(count) || 0);
@@ -39,6 +43,7 @@ export function clearUnreadNotificationCount() {
     unreadNotificationCount.value = 0;
 }
 
+// handleIncomingNotification shows the error when the websocket could not send something
 export function handleIncomingNotification(data) {
     if (data && data.error) {
         messageSent.value = false;

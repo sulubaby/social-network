@@ -2,6 +2,7 @@
 import { ref, watch } from 'vue';
 import { getPostGroups } from '@/api/common/friends';
 
+// PostPrivacy lets the user pick public, followers only, or a chosen list of followers
 const props = defineProps({
     modelValue: {
         type: Number,
@@ -19,8 +20,10 @@ const groups = ref([]);
 const loadingGroups = ref(false);
 const groupsLoaded = ref(false);
 
+// groupIDValue is the number we send to the server as groupID
 const groupIDValue = ref(0);
 
+// turn the picked option into that number
 watch(() => props.modelValue, (value) => {
     if (value === 'public') {
         groupIDValue.value = 0;
@@ -35,6 +38,7 @@ watch(() => props.modelValue, (value) => {
     }
 }, { immediate: true });
 
+// when a list is picked, its id is the groupID
 watch(() => props.groupId, (value) => {
     if (props.modelValue === 'group') {
         groupIDValue.value = value;
@@ -52,6 +56,7 @@ function togglePrivate(event) {
     );
 }
 
+// the lists are only loaded the first time "group" is picked
 function selectPrivacy(value) {
     if (value == 'group' && !groupsLoaded.value) {
         getGroups()
@@ -66,6 +71,7 @@ function selectGroup(id) {
 
 defineExpose({ groupIDValue });
 
+// getGroups loads the lists of followers the user made before
 async function getGroups() {
     loadingGroups.value = true;
 
@@ -128,6 +134,7 @@ async function getGroups() {
                 </span>
             </button>
 
+            <!-- the lists to choose from, only when "group" is picked -->
             <div v-if="modelValue === 'group'" class="group-list">
                 <div v-if="loadingGroups" class="group-state-message">
                     Loading groups...

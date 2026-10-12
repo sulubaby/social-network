@@ -8,6 +8,7 @@ import { useCommentMedia, commentImageSrc, COMMENT_MEDIA_ACCEPT } from '@/helper
 import { LIMITS, charCount, cleanText, validateCommentText } from '@/helpers/limits';
 import { resizeTextarea, handleEnterKey, enforceLines } from '@/helpers/multilineInput';
 
+// HomePostComments is the comments dialog of a post, with replies, likes, delete and an image or gif
 const props = defineProps({
     show: { type: Boolean, default: false },
     postId: { type: Number, required: true },
@@ -38,11 +39,13 @@ const commentInput = ref(null);
 const commentError = ref('');
 const commentCount = computed(() => charCount(newComment.value));
 
+// keep the comment inside the max number of lines
 function onCommentInput(event) {
     newComment.value = enforceLines(event, LIMITS.commentLines);
     commentError.value = '';
 }
 
+// enter sends, shift enter makes a new line
 function onCommentKeydown(event) {
     handleEnterKey(event, submitComment);
 }
@@ -50,6 +53,7 @@ function onCommentKeydown(event) {
 watch(newComment, () => {
     nextTick(() => resizeTextarea(commentInput.value, 120));
 });
+// the picked image of the comment box and its preview
 const {
     file: mediaFile,
     previewUrl: mediaPreview,
@@ -76,6 +80,7 @@ function convertComments(data) {
     return data.map(comment => createComment(comment));
 }
 
+// short time like 5m or 2h, older than a week shows the date
 function formatDate(date) {
     const created = new Date(date);
     if (Number.isNaN(created.getTime())) return date;
@@ -97,6 +102,7 @@ function isLiked(comment) {
     return value === true || Number(value) === 1;
 }
 
+// load the top level comments every time the dialog opens
 async function loadComments() {
     loading.value = true;
     error.value = '';
@@ -110,6 +116,7 @@ async function loadComments() {
     }
 }
 
+// a fake comment we show right away while the real one is being saved
 function createTemporaryComment(content, replyTo = null, imagePath = '') {
     const comment = new Comment(
         `temporary-${Date.now()}`, content, props.postId, replyTo, 0,
@@ -123,6 +130,8 @@ function createTemporaryComment(content, replyTo = null, imagePath = '') {
     return comment;
 }
 
+// add the comment to the top of the list first, then swap it for the real one from the server
+// if it fails we remove it and give the text and image back so nothing is lost
 async function submitTopLevel(content, media = null) {
     submitting.value = true;
     error.value = '';
@@ -145,6 +154,7 @@ async function submitTopLevel(content, media = null) {
     }
 }
 
+// same as above but inside the replies of a comment
 async function submitReplyTo(parentComment, content, media = null) {
     submitting.value = true;
     replyErrors.value[parentComment.ID] = '';
@@ -173,6 +183,7 @@ async function submitReplyTo(parentComment, content, media = null) {
     }
 }
 
+// submitComment checks the text then sends it as a reply or a normal comment
 async function submitComment() {
     const content = cleanText(newComment.value);
     if ((!content && !mediaFile.value) || submitting.value) return;
@@ -196,6 +207,7 @@ async function submitComment() {
     }
 }
 
+// replies load the first time they are opened, after that the button just shows or hides them
 async function showReplies(comment) {
     if (comment.loadedReplies !== null) {
         comment.showReplies = !comment.showReplies;
@@ -235,6 +247,7 @@ const viewerId = computed(() => {
     return value === null || value === undefined || value === '' ? null : Number(value);
 });
 
+// the post owner can delete any comment on their post, others only their own
 const isPostOwner = computed(() => {
     if (viewerId.value === null || props.postOwnerId === null || props.postOwnerId === undefined || props.postOwnerId === '') {
         return false;
@@ -251,6 +264,7 @@ function canDeleteComment(comment) {
     return isPostOwner.value || isOwner(comment);
 }
 
+// remove it from the list first, put it back if the delete failed
 async function removeComment(comment) {
     menuComment.value = null;
     const index = comments.value.findIndex(item => item.ID === comment.ID);
@@ -285,6 +299,7 @@ async function removeReply(parentComment, reply) {
     }
 }
 
+// change the like on screen first and undo it if the server says no
 async function likeComment(comment) {
     const wasLiked = isLiked(comment);
     const oldVotes = comment.votes;
@@ -343,6 +358,7 @@ watch(() => props.show, value => { if (value) loadComments(); });
                     <div v-if="loading" class="comments-loading">Loading comments...</div>
                     <div v-else-if="!comments.length" class="no-comments">No comments yet.</div>
 
+                    <!-- top level comments, each one can open its replies under it -->
                     <div v-for="comment in comments" :key="comment.ID" class="comment"
                         :class="{ 'comment-active': replyingTo && replyingTo.ID === comment.ID }">
                         <div class="comment-row">
@@ -378,6 +394,7 @@ watch(() => props.show, value => { if (value) loadComments(); });
                                 <div v-if="replyErrors[comment.ID]" class="reply-error">{{ replyErrors[comment.ID] }}
                                 </div>
 
+                                <!-- the replies of this comment -->
                                 <div v-if="comment.showReplies" class="replies">
                                     <div v-for="reply in comment.loadedReplies" :key="reply.ID" class="comment reply">
                                         <div class="comment-row">
@@ -432,6 +449,7 @@ watch(() => props.show, value => { if (value) loadComments(); });
                     <button type="button" aria-label="Remove image" @click="clearMedia">✕</button>
                 </div>
 
+                <!-- the box at the bottom, hidden when the author turned comments off -->
                 <p v-if="!allowComments" class="comments-off">Comments are turned off for this post.</p>
 
                 <form v-else class="add-comment" @submit.prevent="submitComment">

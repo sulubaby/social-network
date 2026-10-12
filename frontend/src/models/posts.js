@@ -1,3 +1,4 @@
+// Reaction is what we send when liking or disliking, value is 1 or -1
 export class Reaction {
     value;
     userID;
@@ -17,6 +18,7 @@ export class Reaction {
     }
 }
 
+// Comment is one comment in the list, the last three fields are only for the ui
 export class Comment {
     constructor(
         id,
@@ -38,12 +40,14 @@ export class Comment {
         this.user = user;
         this.replies = replies;
         this.imagePath = imagePath;
+        // replies are loaded only when the user opens them
         this.loadedReplies = null;
         this.showReplies = false;
         this.pending = false;
     }
 }
 
+// createComment turns the server json into a Comment, with defaults for missing fields
 export function createComment(data) {
     return new Comment(
         data.id,
@@ -58,6 +62,7 @@ export function createComment(data) {
     );
 }
 
+// Post has the same fields the server sends for a post card
 export class Post {
     constructor(
         ReactionValue = 0,
@@ -102,6 +107,7 @@ export class Post {
     }
 }
 
+// Posts is a small list helper for adding and removing posts
 export class Posts {
     constructor(posts = []) {
         this.posts = posts

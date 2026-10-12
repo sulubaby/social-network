@@ -16,6 +16,7 @@ import { addNotification } from '@/data/notifications';
 import { Reaction } from '@/models/posts';
 import { claimPlayback, releasePlayback } from '@/helpers/singleVideo';
 
+// HomeVideoItem is one video in the videos tab with its play controls, reactions and comments
 const props = defineProps({
     post: {
         type: Object,
@@ -53,6 +54,7 @@ const expanded = ref(false);
 const showComments = ref(false);
 const failed = ref(false);
 
+// local counts so the buttons update right away
 const likeCount = ref(
     props.post.likeCount ?? 0
 );
@@ -83,10 +85,12 @@ const authorName = computed(() => {
     return `${props.post.firstName || ''} ${props.post.lastName || ''}`.trim();
 });
 
+// long captions get a "more" button
 const hasLongContent = computed(() => {
     return (props.post.content || '').length > 90;
 });
 
+// showFlash shows the play or pause icon in the middle for a moment
 function showFlash(kind) {
     flash.value = kind;
 
@@ -97,6 +101,7 @@ function showFlash(kind) {
     }, 600);
 }
 
+// only the active video is allowed to play
 async function play() {
     const video = videoElement.value;
 
@@ -141,6 +146,7 @@ function pause() {
     playing.value = false;
 }
 
+// tapping the video plays or pauses it
 function togglePlay() {
     const video = videoElement.value;
 
@@ -157,6 +163,7 @@ function togglePlay() {
     }
 }
 
+// progress bar in percent
 function handleTimeUpdate() {
     const video = videoElement.value;
 
@@ -168,6 +175,7 @@ function handleTimeUpdate() {
         (video.currentTime / video.duration) * 100;
 }
 
+// clicking the progress bar jumps to that part of the video
 function seek(event) {
     const video = videoElement.value;
 
@@ -190,6 +198,7 @@ function seek(event) {
         ratio * video.duration;
 }
 
+// count the view once, the first time this video becomes active
 async function markSeen() {
     if (seen) {
         return;
@@ -207,6 +216,7 @@ async function markSeen() {
     }
 }
 
+// like or dislike, same as the post card, the counts change only if the server said ok
 async function react(value) {
     if (reacting.value) {
         return;
@@ -262,6 +272,7 @@ async function react(value) {
     currentReaction.value = next;
 }
 
+// 1200 shows as 1.2K and 1500000 as 1.5M
 function formatCount(value) {
     if (value >= 1000000) {
         return `${(value / 1000000)
@@ -279,6 +290,7 @@ function formatCount(value) {
 }
 
 watch(
+    // when this video becomes active start it from the beginning, otherwise stop it
     () => props.active,
     async isActive => {
         const video = videoElement.value;
@@ -314,6 +326,7 @@ watch(
 );
 
 watch(
+    // pause while the comments are open and continue after
     showComments,
     open => {
         if (open) {
@@ -362,6 +375,7 @@ onMounted(() => {
     }
 });
 
+// stop everything and remove the src so the browser stops downloading the video
 onBeforeUnmount(() => {
     observer?.disconnect();
 

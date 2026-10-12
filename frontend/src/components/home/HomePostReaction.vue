@@ -1,4 +1,5 @@
 <script setup>
+// HomePostReaction is the small line with the like and dislike counts under the media
 defineProps({
     likes: {
         type: Number,

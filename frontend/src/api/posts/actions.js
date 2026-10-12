@@ -1,3 +1,4 @@
+// postReaction likes or dislikes a post, react is { postID, value }
 export async function postReaction(react) {
     const resp = await fetch("/api/post/reaction", {
         method: 'POST',

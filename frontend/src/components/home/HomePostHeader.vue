@@ -3,6 +3,7 @@ import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue';
 import { requestFollow } from '@/api/users/profiles';
 import { addNotification } from '@/data/notifications';
 
+// HomePostHeader is the top of a post: avatar, name, follow button, date, location and the delete menu
 const props = defineProps({
     userId: {
         type: [Number, String],
@@ -62,6 +63,7 @@ watch(() => props.relationship, value => {
     followState.value = value || '';
 });
 
+// followAuthor is the follow button next to the name on someone else's post
 async function followAuthor() {
     if (followBusy.value || !props.userId) return;
 
@@ -81,6 +83,7 @@ async function followAuthor() {
         followBusy.value = false;
     }
 }
+// a group id above 0 means the post was shared with a chosen list, so we show that text
 const isSelectedUsersPost = computed(() => {
     if (props.groupId === null || props.groupId === undefined || props.groupId === '') {
         return false;
@@ -97,6 +100,7 @@ function requestDelete() {
     emit('delete');
 }
 
+// close the 3 dots menu when clicking anywhere else
 function handleOutsideClick(event) {
     if (menuOpen.value && menuRoot.value && !menuRoot.value.contains(event.target)) {
         menuOpen.value = false;
@@ -119,6 +123,7 @@ function openLocationDialog() {
     emit('open-location');
 }
 
+// same idea as the date in the card but with full words like 2 hours ago
 const relativeTime = computed(() => {
     if (!props.formattedDate) {
         return '';
@@ -181,6 +186,7 @@ const relativeTime = computed(() => {
                         {{ firstName }} {{ lastName }}
                     </span>
 
+                    <!-- friend badge, follow button or requested badge depending on how we are connected -->
                     <span v-if="followState === 'friend'" class="relationship-badge">
                         Friends
                     </span>
@@ -220,6 +226,7 @@ const relativeTime = computed(() => {
             </div>
         </div>
 
+        <!-- the 3 dots menu with delete, only on my own posts -->
         <div v-if="canDelete" ref="menuRoot" class="post-options">
             <button class="more-button" type="button" aria-label="Post options" aria-haspopup="true"
                 :aria-expanded="menuOpen" @click="menuOpen = !menuOpen">

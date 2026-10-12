@@ -15,6 +15,7 @@ import ErrorPage from '@/views/errors/error_page.vue'
 import Welcome from '@/views/welcome/Welcome.vue'
 import { setSessionUserId } from '@/data/currentUser'
 
+// every page of the site and its url
 const routes = [
     {
         path: '/',
@@ -73,6 +74,7 @@ const routes = [
         component: ErrorPage
     },
     {
+        // any other url shows the 404 page
         path: '/:pathMatch(.*)*',
         component: ErrorPage,
         props: { code: 404 }
@@ -84,8 +86,10 @@ export const router = createRouter({
     routes
 })
 
+// pages you can open without being logged in
 const PUBLIC_PATHS = ['/', '/login', '/error']
 
+// ask the server if the cookie is still a valid session and remember the user id
 async function hasValidSession() {
     try {
         const resp = await fetch('/api/session', {
@@ -109,6 +113,7 @@ async function hasValidSession() {
     }
 }
 
+// before every page change, send logged out people to the login page
 router.beforeEach(async (to) => {
     if (PUBLIC_PATHS.includes(to.path)) {
         return true

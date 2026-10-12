@@ -2,8 +2,10 @@ import { ref, onBeforeUnmount } from 'vue';
 import { CHAT_MEDIA_ACCEPT, validateChatMedia } from '@/helpers/chatMedia';
 import { cleanText, validateCommentText } from '@/helpers/limits';
 
+// comments take the same images and gifs as chats
 export const COMMENT_MEDIA_ACCEPT = CHAT_MEDIA_ACCEPT;
 
+// a blob url is the local preview before upload, anything else is a saved file in uploads
 export function commentImageSrc(path) {
     if (!path) {
         return '';
@@ -12,6 +14,8 @@ export function commentImageSrc(path) {
     return path.startsWith('blob:') ? path : `/uploads/${path}`;
 }
 
+// buildCommentRequest makes the fetch options for a new comment
+// no image means a small json body, with an image we need form data
 export function buildCommentRequest(postId, content, replyTo = null, image = null) {
     content = cleanText(content);
 
@@ -54,12 +58,14 @@ export function buildCommentRequest(postId, content, replyTo = null, image = nul
     };
 }
 
+// useCommentMedia keeps the picked image of a comment box and its preview
 export function useCommentMedia() {
     const file = ref(null);
     const previewUrl = ref('');
     const error = ref('');
     const fileInput = ref(null);
 
+    // free the preview url so the browser does not keep the file in memory
     function release() {
         if (previewUrl.value) {
             URL.revokeObjectURL(previewUrl.value);
@@ -78,9 +84,11 @@ export function useCommentMedia() {
         fileInput.value?.click();
     }
 
+    // check the picked file first, if it is fine show the preview
     function onSelect(event) {
         const selected = event.target.files?.[0];
 
+        // reset the input so picking the same file again still works
         event.target.value = '';
 
         if (!selected) {
@@ -100,6 +108,7 @@ export function useCommentMedia() {
         previewUrl.value = URL.createObjectURL(selected);
     }
 
+    // takeMedia hands the file to the send code and empties the box right away
     function takeMedia() {
         if (!file.value) {
             return null;
@@ -117,6 +126,7 @@ export function useCommentMedia() {
         return media;
     }
 
+    // restoreMedia puts the image back if sending failed
     function restoreMedia(media) {
         if (!media) {
             return;

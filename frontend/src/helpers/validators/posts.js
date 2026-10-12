@@ -1,5 +1,7 @@
 import { LIMITS, charCount } from '@/helpers/limits';
 
+// validatePost checks the post in the browser first, the server checks again anyway
+// it returns the field with the problem so the form can show the message there
 export function validatePost(data) {
     if (typeof data.content !== 'string') {
         return {
@@ -29,6 +31,7 @@ export function validatePost(data) {
         };
     }
 
+    // groupID is the privacy: 0 public, -1 followers, bigger is a chosen list
     if (typeof data.groupID !== 'number' || data.groupID < -1) {
         return {
             field: 'groupID',
@@ -43,6 +46,7 @@ export function validatePost(data) {
         };
     }
 
+    // location is "name:lat:lng"
     if (data.location) {
         const locationParts = data.location.split(':');
 
@@ -87,6 +91,7 @@ export function validatePost(data) {
         };
     }
 
+    // check both the type and the extension because a file can be renamed
     if (data.image) {
         const allowedTypes = [
             'image/png',

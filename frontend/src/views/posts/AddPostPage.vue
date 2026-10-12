@@ -16,6 +16,7 @@ import { addNotification } from '@/data/notifications';
 import { validatePost } from '@/helpers/validators/posts';
 import { router } from '@/router/router';
 
+// everything the create post form fills, step by step
 const post = reactive({
     title: '',
     content: '',
@@ -27,6 +28,7 @@ const post = reactive({
     image: null
 });
 
+// the form has 4 steps: text and media, tags, location, then comments and privacy
 const currentSlide = ref(1);
 
 const validation = ref({
@@ -36,6 +38,7 @@ const validation = ref({
 
 const totalSlides = 4;
 
+// check the form on every change so the error shows under the right field
 watch(
     post,
     () => {
@@ -54,6 +57,7 @@ watch(
     { deep: true }
 );
 
+// you cant go to the next step while the current one has an error
 function nextSlide() {
     if (validation.value.field) {
         addNotification(validation.value.message, 'error');
@@ -80,6 +84,7 @@ function previousSlide() {
     }
 }
 
+// handleSubmit checks everything one last time and sends the post, then opens my profile posts
 async function handleSubmit() {
     // "Group" privacy needs a chosen list, without one the post would go out as public
     if (post.privacy === 'group' && !(Number(post.groupID) > 0)) {
@@ -171,6 +176,7 @@ async function handleSubmit() {
                         </h2>
                     </div>
 
+                    <!-- step 1: the text and the image or video -->
                     <div v-if="currentSlide === 1" class="slide">
                         <PostContentForm v-model:description="post.content" />
 
@@ -185,6 +191,7 @@ async function handleSubmit() {
                         </p>
                     </div>
 
+                    <!-- step 2: tag people -->
                     <div v-else-if="currentSlide === 2" class="slide">
                         <TagPeople v-model="post.taggedPeople" />
 
@@ -193,6 +200,7 @@ async function handleSubmit() {
                         </p>
                     </div>
 
+                    <!-- step 3: location -->
                     <div v-else-if="currentSlide === 3" class="slide">
                         <LocationPicker v-model="post.location" />
 
@@ -201,6 +209,7 @@ async function handleSubmit() {
                         </p>
                     </div>
 
+                    <!-- step 4: turn comments off and pick who can see it -->
                     <div v-else class="slide">
                         <HideCommentsToggle v-model="post.hideComments" />
 

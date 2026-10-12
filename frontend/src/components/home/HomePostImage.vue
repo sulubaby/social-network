@@ -2,6 +2,7 @@
 <script setup>
 import { ref, computed, watch, onBeforeUnmount } from 'vue';
 import { claimPlayback, releasePlayback } from '@/helpers/singleVideo';
+// HomePostImage shows the image, gif or video of a post with the tagged people button on it
 const props = defineProps({
     imagePath: {
         type: String,
@@ -35,6 +36,7 @@ const hasImage = computed(() => {
     return !!props.imagePath;
 });
 
+// mp4 is the only video type posts allow
 const isVideo = computed(() => {
     if (!props.imagePath) {
         return false;
@@ -58,6 +60,7 @@ const videoElement = ref(null);
 
 let observer = null;
 
+// browsers block autoplay with sound, so if play fails we mute and try again
 async function playVideo(video) {
     try {
         await video.play();
@@ -72,6 +75,7 @@ async function playVideo(video) {
     }
 }
 
+// in the feed (auto) the video plays when most of it is on screen and pauses when you scroll away
 function setupObserver(video) {
     observer?.disconnect();
     observer = null;
@@ -100,6 +104,7 @@ function setupObserver(video) {
     observer.observe(video);
 }
 
+// only one video plays at a time, playing this one pauses the others
 function handlePlay() {
     if (videoElement.value) {
         claimPlayback(videoElement.value);
@@ -114,6 +119,7 @@ function handlePause() {
 
 watch(videoElement, video => setupObserver(video), { flush: 'post' });
 
+// stop the video when the card is removed
 onBeforeUnmount(() => {
     observer?.disconnect();
 

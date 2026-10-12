@@ -5,6 +5,8 @@ import { getGroupMembers } from '@/api/posts/groups';
 import { addNotification } from '@/data/notifications';
 import { ref } from 'vue';
 
+// TagPeople is the search box to tag people in a post
+// in a group it searches the members, otherwise my friends
 const props = defineProps({
     modelValue: {
         type: Array,
@@ -32,6 +34,7 @@ function isGroupPage() {
     return getCurrentGroupID() !== null;
 }
 
+// search after the user stops typing for half a second
 function handleSearchFriends() {
     clearTimeout(timeout);
 
@@ -59,6 +62,7 @@ function handleSearchFriends() {
                 result = await getFriends(value);
             }
 
+            // the server gives an object by id, make it a list and hide people already tagged
             friends.value = Object.entries(result.data)
                 .map(([id, person]) => ({
                     id: Number(id),
@@ -78,6 +82,7 @@ function handleSearchFriends() {
     }, 500);
 }
 
+// add the person to the tags and clear the search
 function addPerson(person) {
     if (!person) {
         return;
@@ -104,6 +109,7 @@ function addPerson(person) {
     friends.value = [];
 }
 
+// the x on a tag removes that person
 function removePerson(id) {
     emit(
         'update:modelValue',

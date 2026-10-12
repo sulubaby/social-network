@@ -6,14 +6,17 @@ import HomeVideoFeed from '@/components/home/HomeVideoFeed.vue';
 import SideNavigation from '@/components/layout/SideNavigation.vue';
 import TopNavigation from '@/components/layout/TopNavigation.vue';
 
+// the home page has two tabs, the normal feed and the videos
 const activeTab = ref('feed');
 const posts = ref([]);
 const loading = ref(false);
 const hasMore = ref(true);
 const offset = ref(0);
 
+// used so the scroll check runs at most every 200ms
 let throttleTimeout = null;
 
+// the tagged list can come with different names, this always gives an array
 function getTaggedPeople(post) {
     if (Array.isArray(post?.taggedPeople)) {
         return post.taggedPeople;
@@ -30,6 +33,7 @@ function getTaggedPeople(post) {
     return [];
 }
 
+// loadPosts gets the next part of the feed, it stops while loading or when there is nothing more
 async function loadPosts() {
     if (loading.value || !hasMore.value) {
         return;
@@ -68,10 +72,12 @@ async function loadPosts() {
             );
         });
 
+        // only add posts we dont have yet, so no post shows twice
         const have = new Set(posts.value.map(p => p.id));
         posts.value.push(...newPosts.filter(p => !have.has(p.id)));
         offset.value += newPosts.length;
 
+        // the server sends 13 at most, less means we reached the end
         if (newPosts.length < 13) {
             hasMore.value = false;
         }
@@ -90,6 +96,7 @@ function switchTab(tab) {
     }
 }
 
+// infinite scroll, load more when we are 500px from the bottom
 function handleScroll() {
     if (activeTab.value !== 'feed' || throttleTimeout) {
         return;
@@ -110,6 +117,7 @@ function handleScroll() {
     }, 200);
 }
 
+// load the first posts and start listening to the scroll
 onMounted(() => {
     loadPosts();
 
@@ -120,6 +128,7 @@ onMounted(() => {
     );
 });
 
+// remove the listener when leaving the page so it does not keep running
 onUnmounted(() => {
     window.removeEventListener('scroll', handleScroll);
 
@@ -139,6 +148,7 @@ onUnmounted(() => {
 
             <main class="main-content">
                 <div class="content-container" :class="{ 'videos-mode': activeTab === 'videos' }">
+                    <!-- feed and videos tabs -->
                     <nav class="home-tabs">
                         <button type="button" class="home-tab" :class="{ active: activeTab === 'feed' }"
                             @click="switchTab('feed')">
@@ -170,6 +180,7 @@ onUnmounted(() => {
                     <template v-if="activeTab === 'feed'">
                         <HomeSearch />
 
+                        <!-- one card for every post in the feed -->
                         <section class="posts">
                             <HomePosts :auto="true" v-for="post in posts" :key="post.id" v-bind="post"
                                 :post-id="post.id" :likes="post.likeCount" :dislikes="post.disLikeCount"

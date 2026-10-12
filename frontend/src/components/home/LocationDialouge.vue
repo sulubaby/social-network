@@ -1,4 +1,5 @@
 <script setup>
+// LocationDialouge shows the post location on a small map with a link to open google maps
 defineProps({
     show: {
         type: Boolean,

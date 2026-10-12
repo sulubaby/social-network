@@ -1,3 +1,4 @@
+// getNotifications loads 20 notifications starting at offset
 export async function getNotifications(offset = 0) {
     const response = await fetch(`/api/notifications?offset=${offset}`, {
         credentials: 'include'
@@ -6,6 +7,7 @@ export async function getNotifications(offset = 0) {
     return await response.json();
 }
 
+// getUnreadNotificationCount is the number for the bell badge
 export async function getUnreadNotificationCount() {
     const response = await fetch('/api/notifications/unread', {
         credentials: 'include'
@@ -14,6 +16,7 @@ export async function getUnreadNotificationCount() {
     return await response.json();
 }
 
+// markNotificationsRead marks all as read
 export async function markNotificationsRead() {
     const response = await fetch('/api/notifications/read', {
         method: 'POST',
@@ -23,6 +26,7 @@ export async function markNotificationsRead() {
     return await response.json();
 }
 
+// markNotificationRead marks one, the answer has the new unread count
 export async function markNotificationRead(id) {
     const response = await fetch(`/api/notifications/${id}/read`, {
         method: 'POST',
@@ -32,6 +36,7 @@ export async function markNotificationRead(id) {
     return await response.json();
 }
 
+// the next ones are the accept and decline buttons inside the notifications
 export async function respondToGroupInvite(groupID, status) {
     const response = await fetch('/api/groups/status', {
         method: 'POST',
@@ -75,6 +80,7 @@ export async function rejectFollowRequest(userID) {
     return await response.json();
 }
 
+// respondToJoinRequest is for the group owner, code says accept or reject
 export async function respondToJoinRequest(groupID, userID, code) {
     const response = await fetch('/api/groups/requests', {
         method: 'POST',

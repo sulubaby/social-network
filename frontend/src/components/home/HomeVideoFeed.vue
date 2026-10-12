@@ -3,6 +3,7 @@ import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import HomeVideoItem from './HomeVideoItem.vue';
 import { getHomeVideos } from '@/api/posts/posts';
 
+// HomeVideoFeed is the videos tab, one full screen video at a time like reels
 defineProps({
     currentUserId: {
         type: [Number, String],
@@ -17,7 +18,9 @@ const offset = ref(0);
 const loading = ref(false);
 const hasMore = ref(true);
 const error = ref('');
+// activeId is the video on screen now, only that one plays
 const activeId = ref(null);
+// start muted because browsers dont allow autoplay with sound
 const muted = ref(true);
 const scroller = ref(null);
 
@@ -29,6 +32,7 @@ const activeIndex = computed(() => {
     );
 });
 
+// loadMore gets the next 5 videos and skips any we already have
 async function loadMore() {
     if (loading.value || !hasMore.value) {
         return;
@@ -90,6 +94,7 @@ function handleVisible(id) {
     activeId.value = id;
 }
 
+// pause every video that is not the active one
 function pauseOtherVideos(activeVideoId) {
     document
         .querySelectorAll('.video-item video')
@@ -126,6 +131,7 @@ function toggleMute() {
     muted.value = !muted.value;
 }
 
+// scroll to a video by its place in the list
 function goTo(index) {
     const container = scroller.value;
 
@@ -143,6 +149,7 @@ function goTo(index) {
     }
 }
 
+// arrow keys or j and k move between videos, but not while typing or when comments are open
 function handleKeydown(event) {
     const tag = event.target?.tagName;
 
@@ -193,6 +200,7 @@ function handleKeydown(event) {
     }
 }
 
+// the video that is most visible in the scroller becomes the active one
 function setupVisibilityObserver() {
     if (!scroller.value) {
         return;
@@ -257,6 +265,7 @@ function setupVisibilityObserver() {
     });
 }
 
+// when we get close to the last video load more
 watch(
     activeIndex,
     index => {

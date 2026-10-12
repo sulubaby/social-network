@@ -1,4 +1,5 @@
 <script setup>
+// HideCommentsToggle is the switch that turns comments off, true means hidden
 defineProps({
     modelValue: {
         type: Boolean,

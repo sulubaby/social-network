@@ -13,6 +13,7 @@ import { viewPost, deletePost } from '@/api/posts/posts.js';
 import { addNotification } from '@/data/notifications';
 import { sessionUserId } from '@/data/currentUser';
 
+// HomePosts is one post card, it is built from the header, media, reactions, actions and comments parts
 const props = defineProps({
     currentUserId: {
         type: [Number, String],
@@ -130,12 +131,14 @@ const showDeleteConfirm = ref(false);
 const deleting = ref(false);
 const deleted = ref(false);
 
+// the logged in user, used to know if this is my post
 const viewerId = computed(() => {
     const value = sessionUserId.value ?? props.currentUserId;
 
     return value === null || value === undefined || value === '' ? null : Number(value);
 });
 
+// only the owner gets the delete button
 const canDelete = computed(() => {
     if (!props.deletable || viewerId.value === null) {
         return false;
@@ -149,8 +152,10 @@ const canDelete = computed(() => {
 });
 
 let observer;
+// seen makes sure we tell the server about a view only once
 let seen = false;
 
+// location is "name:lat:lng", split it to show the name and build the map
 const locationParts = computed(() => {
     if (!props.location) {
         return null;
@@ -176,6 +181,7 @@ const locationParts = computed(() => {
     };
 });
 
+// small google map for the location dialog
 const mapEmbedUrl = computed(() => {
     if (
         locationParts.value?.lat == null ||
@@ -187,6 +193,7 @@ const mapEmbedUrl = computed(() => {
     return `https://www.google.com/maps?q=${locationParts.value.lat},${locationParts.value.lon}&output=embed`;
 });
 
+// drop empty tag entries so the tag list does not break
 const normalizedTaggedPeople = computed(() => {
     if (!Array.isArray(props.taggedPeople)) {
         return [];
@@ -217,6 +224,7 @@ const formattedDate = computed(() => {
     return formatRelativeDate(props.createdAt);
 });
 
+// shows the time like 5m ago, 3h ago, 2d ago or 1w ago
 function formatRelativeDate(dateString) {
     if (!dateString) {
         return '';
@@ -296,6 +304,7 @@ function closeDeleteConfirm() {
     }
 }
 
+// delete after the user says yes in the confirm box, then hide the card
 async function confirmDelete() {
     if (deleting.value) {
         return;
@@ -328,6 +337,7 @@ function closeLocationDialog() {
     showLocationDialog.value = false;
 }
 
+// markPostAsSeen saves the view so this post goes lower in the feed next time
 async function markPostAsSeen() {
     if (seen) {
         return;
@@ -342,11 +352,13 @@ async function markPostAsSeen() {
     }
 }
 
+// when half of the card is on the screen we count it as seen
 onMounted(() => {
     if (!postElement.value) {
         return;
     }
 
+    // old browsers without the observer just count it right away
     if (!('IntersectionObserver' in window)) {
         markPostAsSeen();
         return;
@@ -396,6 +408,7 @@ onBeforeUnmount(() => {
             :allowComments="props.allowComments" :dislikes="props.dislikes" @like="handleLike" @dislike="handleDislike"
             @toggle-comments="toggleComments" />
 
+        <!-- the comments open in a dialog when the comment button is clicked -->
         <HomePostComments :show="showComments" :post-id="postId" :current-user-id="currentUserId"
             :first-name="firstName" :last-name="lastName" :avatar-path="avatarPath" :created-at="createdAt"
             :content="content" :image-path="imagePath" :post-owner-id="userId"
@@ -406,6 +419,7 @@ onBeforeUnmount(() => {
 
         <TaggedPeopleDialoug :show="showTaggedDialog" :people="normalizedTaggedPeople" @close="closeTaggedDialog" />
 
+        <!-- ask before deleting because it cannot be undone -->
         <ConfirmModal v-if="showDeleteConfirm" title="Delete this post?" confirm-label="Delete" cancel-label="Cancel"
             :danger="true" @confirm="confirmDelete" @cancel="closeDeleteConfirm">
             <p>This will permanently delete the post, its comments, and reactions. This cannot be undone.</p>

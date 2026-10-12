@@ -1,3 +1,4 @@
+// current is the video that is playing now, so only one plays at the same time
 let current = null;
 
 export function claimPlayback(video) {

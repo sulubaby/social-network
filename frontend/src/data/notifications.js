@@ -1,7 +1,9 @@
 import { reactive } from 'vue';
 
+// notifications here are the small popups on the screen, not the notifications page
 export const notifications = reactive([]);
 
+// postDialog is the post that opens on top of the page when a notification is clicked
 export const postDialog = reactive({
     show: false,
     postId: null
@@ -21,6 +23,7 @@ export function closePostDialog() {
     postDialog.postId = null;
 }
 
+// postImageUrl gives the picture for the notification, videos dont get a thumbnail
 export function postImageUrl(imagePath) {
     if (!imagePath) {
         return '';
@@ -44,8 +47,11 @@ export function avatarUrl(avatarPath) {
     return avatarPath ? `/uploads/${avatarPath}` : '';
 }
 
+// each popup gets its own id so we can remove the right one
 let nextNotificationId = 0;
 
+// addNotification shows a popup, it goes away alone after a few seconds
+// popups you can click stay a bit longer
 export function addNotification(message, type = 'success', options = {}) {
     const id = ++nextNotificationId;
 
@@ -68,6 +74,7 @@ export function addNotification(message, type = 'success', options = {}) {
     }, clickable ? 6000 : 3000);
 }
 
+// removeNotification closes one popup
 export function removeNotification(id) {
     const index = notifications.findIndex(
         notification => notification.id === id

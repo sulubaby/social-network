@@ -7,9 +7,11 @@ import { onMounted, ref } from 'vue';
 import { sideNavOpen, toggleSideNav } from '@/data/sideNav';
 import { unreadNotificationCount } from '@/data/notificationCount';
 
+// the top bar on every page: menu button, search, create post and my avatar
 const avatar = ref('');
 const { searchQuery, submitSearch } = useSearchBox();
 
+// load my avatar for the corner of the bar
 async function getData() {
     try {
         const result = await getUserData()
@@ -41,6 +43,7 @@ onMounted(getData)
                 <i v-if="unreadNotificationCount > 0 && !sideNavOpen" class="burger-dot" aria-label="Unread notifications"></i>
             </button>
 
+            <!-- pressing enter opens the search page with the text -->
             <form class="search" role="search" @submit.prevent="submitSearch">
                 <button class="search-submit" type="submit" aria-label="Search">⌕</button>
                 <input

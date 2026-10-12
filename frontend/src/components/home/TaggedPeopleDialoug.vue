@@ -17,6 +17,7 @@ const emit = defineEmits(['close']);
 
 const router = useRouter();
 
+// the people list can come with lower or upper case keys, these helpers read both
 const visiblePeople = computed(() => {
     return props.people.filter(person => {
         return person && (person.id != null || person.ID != null);
@@ -56,6 +57,7 @@ function getAvatar(person) {
     return person?.avatarPath ?? person?.Avatar ?? 'avatars/default.png';
 }
 
+// full urls are used as they are, saved paths live under /uploads
 function getAvatarUrl(person) {
     const avatar = getAvatar(person);
 
@@ -74,6 +76,7 @@ function getAvatarUrl(person) {
     return `/uploads/${avatar}`;
 }
 
+// clicking a person closes the dialog and opens their profile
 function openProfile(person) {
     const id = getPersonId(person);
 
@@ -95,6 +98,7 @@ function closeDialog() {
     emit('close');
 }
 
+// close only when the dark background is clicked, not the box itself
 function handleBackdropClick(event) {
     if (event.target === event.currentTarget) {
         closeDialog();

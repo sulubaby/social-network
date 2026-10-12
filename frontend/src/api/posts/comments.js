@@ -1,5 +1,6 @@
 import { buildCommentRequest } from '@/helpers/commentMedia';
 
+// getComments loads the comments of a post, or the replies of one comment when replyTo is given
 export async function getComments(postId, replyTo = null) {
     const params = new URLSearchParams();
 
@@ -29,6 +30,7 @@ export async function getComments(postId, replyTo = null) {
     return data.comments || [];
 }
 
+// addComment sends text and maybe an image, buildCommentRequest picks json or form data
 export async function addComment(
     postId,
     content,
@@ -51,6 +53,7 @@ export async function addComment(
     return data.comment;
 }
 
+// deleteComment removes the comment and its replies
 export async function deleteComment(commentId) {
     const response = await fetch(
         `/api/post/comment?commentId=${commentId}`,
@@ -71,6 +74,7 @@ export async function deleteComment(commentId) {
     return data;
 }
 
+// voteComment is like 1 or dislike -1, the same vote again removes it
 export async function voteComment(commentId, vote) {
     const response = await fetch(
         `/api/post/comment/vote?commentId=${commentId}&vote=${vote}`,

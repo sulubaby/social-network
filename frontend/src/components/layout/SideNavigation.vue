@@ -8,6 +8,7 @@ import { sideNavOpen, closeSideNav } from '@/data/sideNav';
 import { hasUnreadChats } from '@/data/chatState';
 
 const route = useRoute();
+// on desktop the menu is always shown, on small screens it slides in from the burger button
 const desktopQuery = window.matchMedia('(min-width: 1025px)');
 
 function handleKeydown(event) {
@@ -16,18 +17,22 @@ function handleKeydown(event) {
     }
 }
 
+// if the screen gets big again close the sliding menu
 function handleBreakpointChange(event) {
     if (event.matches) {
         closeSideNav();
     }
 }
 
+// stop the page behind from scrolling while the menu is open
 watch(sideNavOpen, (open) => {
     document.body.style.overflow = open ? 'hidden' : '';
 });
 
+// close the menu after going to another page
 watch(() => route.fullPath, closeSideNav);
 
+// get the bell number when the menu shows
 onMounted(() => {
     refreshUnreadNotificationCount();
     window.addEventListener('keydown', handleKeydown);
@@ -90,6 +95,7 @@ async function logoutHandler() {
                     <span class="icon">♢</span>
                     <span class="label">notifications</span>
 
+                    <!-- unread notifications, big numbers show as 99+ -->
                     <span v-if="unreadNotificationCount > 0" class="badge">
                         {{ unreadNotificationCount > 99 ? '99+' : unreadNotificationCount }}
                     </span>

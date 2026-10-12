@@ -31,6 +31,7 @@ const showPostDialog = ref(false);
 const route = useRoute();
 const router = useRouter();
 
+// the filter tabs at the top of the page
 const tabs = [
     { key: 'all', label: 'All' },
     { key: 'posts', label: 'Posts' },
@@ -46,6 +47,7 @@ function normalizeTab(tab) {
     return tabs.some(item => item.key === tab) ? tab : 'all';
 }
 
+// the tab can come from the url like /notifications?tab=requests
 const activeTab = ref(normalizeTab(route.query.tab));
 
 watch(
@@ -53,6 +55,7 @@ watch(
     (tab) => setTab(normalizeTab(tab))
 );
 
+// a mention with a group but no post came from a group chat
 function isChatMention(notification) {
     return (
         !!notification.post_mention_user_id &&
@@ -71,6 +74,7 @@ function openChat(notification) {
     router.push({ path: `/groups/${groupID}`, query: { tab: 'chat' } });
 }
 
+// getCategory decides which tab a notification belongs to by checking which fields it has
 function getCategory(notification) {
     if (isChatMention(notification)) {
         return 'mentions';
@@ -115,6 +119,7 @@ function getCategory(notification) {
     return 'posts';
 }
 
+// the small number next to each tab
 const tabCounts = computed(() => {
     const counts = { all: notifications.value.length };
 
@@ -146,9 +151,11 @@ const emptyMessages = {
     events: 'No event notifications'
 };
 
+// these stop two live refreshes running at once, a new one waits for the first to finish
 let liveRefreshing = false;
 let liveQueued = false;
 
+// when the websocket says a new notification came, get the newest ones and put the new ones on top
 async function handleLiveNotification() {
     if (liveRefreshing) {
         liveQueued = true;
@@ -184,12 +191,14 @@ async function handleLiveNotification() {
     }
 }
 
+// coming back to the tab also refreshes, the page could have missed something while hidden
 function handleVisibilityChange() {
     if (!document.hidden) {
         handleLiveNotification();
     }
 }
 
+// first load, then mark them read since the user is looking at them
 onMounted(async () => {
     window.addEventListener('notification-received', handleLiveNotification);
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -205,6 +214,7 @@ onUnmounted(() => {
     document.removeEventListener('visibilitychange', handleVisibilityChange);
 });
 
+// mark all read and set the bell to 0, but not while the tab is hidden
 async function markAsRead() {
     if (document.hidden) {
         return;
@@ -241,6 +251,7 @@ async function loadNotifications() {
     }
 }
 
+// loadMore gets the next page and returns how many came
 async function loadMore() {
     if (loadingMore.value || !hasMore.value) {
         return 0;
@@ -276,6 +287,7 @@ async function loadMore() {
     return loaded;
 }
 
+// on a big screen the first page may not be tall enough to scroll, so keep loading until it is
 async function fillPage() {
     await nextTick();
 
@@ -304,6 +316,7 @@ function setTab(tab) {
     fillPage();
 }
 
+// infinite scroll, at most once every 300ms
 const handleScroll = throttle(() => {
     const scrollPosition = window.innerHeight + window.scrollY;
     const pageHeight = document.documentElement.scrollHeight;
@@ -323,6 +336,7 @@ function getActorName(notification) {
     return `${actor.firstName || ''} ${actor.lastName || ''}`.trim() || 'Someone';
 }
 
+// small picture of the post, videos dont get one
 function getPostImage(notification) {
     const post = notification.post;
 
@@ -352,6 +366,7 @@ function openProfile(userID) {
     window.location.href = `/user?id=${userID}`;
 }
 
+// clicking a post notification opens the post in a dialog on this page
 function openPost(postID) {
     if (!postID) {
         return;
@@ -394,6 +409,7 @@ function isComment(notification) {
     );
 }
 
+// only one of these is filled, that is the user who did the action
 function getActorID(notification) {
     return (
         notification.message_user_id ||
@@ -415,12 +431,14 @@ function getActorID(notification) {
     );
 }
 
+// ids of the notifications we are answering now, so a double click cant send twice
 const respondingInvites = ref(new Set());
 
 function isGroupInvite(notification) {
     return !!notification.group_invite_user_id;
 }
 
+// accept or decline a group invite, then remove it from the list
 async function answerInvite(notification, status) {
     const groupID = notification.group?.id;
 
@@ -450,6 +468,7 @@ async function answerInvite(notification, status) {
     }
 }
 
+// group things that are not invites, join requests or posts, clicking them opens the group
 function isGroupActivity(notification) {
     return (
         !!notification.group?.id &&
@@ -484,6 +503,7 @@ function formatEventDate(value) {
     return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
+// going or not going for an event invite
 async function answerEvent(notification, value) {
     const eventID = notification.event?.id;
 
@@ -515,6 +535,7 @@ function isGroupJoin(notification) {
     return !!notification.group_join_user_id;
 }
 
+// the group owner accepts or rejects a join request from here
 async function answerJoin(notification, code) {
     const groupID = notification.group?.id;
 
@@ -548,6 +569,7 @@ async function answerJoin(notification, code) {
     }
 }
 
+// follow request buttons
 async function acceptRequest(notification) {
     if (respondingInvites.value.has(notification.id)) {
         return;
@@ -634,6 +656,7 @@ function formatNotificationTime(value) {
                     <h1>Notifications</h1>
                 </div>
 
+                <!-- tabs to filter the notifications -->
                 <div class="notification-tabs">
                     <button
                         v-for="tab in tabs"

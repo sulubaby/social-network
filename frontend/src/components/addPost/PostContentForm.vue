@@ -1,5 +1,6 @@
 <script setup>
 import { LIMITS } from '@/helpers/limits';
+// PostContentForm is the text box of the new post, it works with v-model:description
 defineProps({
     title: {
         type: String,
