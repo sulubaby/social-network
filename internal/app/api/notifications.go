@@ -9,6 +9,7 @@ import (
 	"strconv"
 )
 
+// GetNotification gives the notifications page, 20 at a time with offset
 func (app *App) GetNotification(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(int)
 
@@ -28,6 +29,7 @@ func (app *App) GetNotification(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// one big query so each notification comes with its actor, post, comment, group and event
 	rows, err := app.DB.Query(`
 		SELECT
 			n.id,
@@ -70,6 +72,7 @@ func (app *App) GetNotification(w http.ResponseWriter, r *http.Request) {
 		JOIN notifications_types nt
 			ON nt.notifications_id = n.id
 		LEFT JOIN user actor
+			// only one of these columns is filled, that one is the person who did the action
 			ON actor.id = COALESCE(
 				nt.comment_reply_user_id,
 				nt.follow_request_user_id,
@@ -97,6 +100,7 @@ func (app *App) GetNotification(w http.ResponseWriter, r *http.Request) {
 		LEFT JOIN group_events ge
 			ON ge.id = nt.event_id
 		WHERE n.user_id = ?
+			// chat messages have their own badge so they are not listed here
 			AND nt.message_user_id IS NULL
 		ORDER BY n.created_at DESC, n.id DESC
 		LIMIT 20 OFFSET ?
@@ -202,6 +206,7 @@ func (app *App) GetNotification(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// only add the fields that exist, the frontend checks which keys are there to know the type
 		notification := map[string]any{
 			"id":         id,
 			"message":    message,
@@ -328,6 +333,7 @@ func (app *App) GetNotification(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// GetUnreadNotificationCount is the number on the bell
 func (app *App) GetUnreadNotificationCount(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(int)
 
@@ -356,6 +362,7 @@ func (app *App) GetUnreadNotificationCount(w http.ResponseWriter, r *http.Reques
 	})
 }
 
+// MarkNotificationsRead is the mark all as read button
 func (app *App) MarkNotificationsRead(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(int)
 
@@ -381,6 +388,7 @@ func (app *App) MarkNotificationsRead(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// MarkNotificationRead marks one when it is clicked and sends back the new count
 func (app *App) MarkNotificationRead(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(int)
 

@@ -2,6 +2,8 @@ package helpers
 
 import "social/internal/models"
 
+// GetNotificationType gives a short name of the type, it is sent as "kind" on the websocket
+// the order matters because some notifications fill more than one field
 func GetNotificationType(notification models.NewNotification) string {
 	if notification.MessageUserID != nil {
 		return "message"
@@ -58,6 +60,8 @@ func GetNotificationType(notification models.NewNotification) string {
 	return ""
 }
 
+// GetNotificationPreferenceType maps a notification to the setting that can turn it off
+// empty means there is no setting for it so it is always sent
 func GetNotificationPreferenceType(notification models.NewNotification) string {
 	switch {
 	case notification.FollowUserID != nil:

@@ -8,6 +8,7 @@ import (
 	"social/database/users"
 )
 
+// the types a user can control in settings, and who they accept them from
 var NotificationTypes = []string{
 	"follow",
 	"post_reaction",
@@ -28,6 +29,7 @@ func IsNotificationMode(value string) bool {
 	return slices.Contains(NotificationModes, value)
 }
 
+// GetNotificationPreferences starts every type on "any" and then applies what the user saved
 func GetNotificationPreferences(db *sql.DB, userID int) (map[string]string, error) {
 	prefs := make(map[string]string, len(NotificationTypes))
 
@@ -59,6 +61,7 @@ func GetNotificationPreferences(db *sql.DB, userID int) (map[string]string, erro
 	return prefs, rows.Err()
 }
 
+// SetNotificationPreference saves one setting, the upsert updates it if it already exists
 func SetNotificationPreference(db *sql.DB, userID int, notificationType, mode string) error {
 	if !IsNotificationType(notificationType) || !IsNotificationMode(mode) {
 		return fmt.Errorf("invalid notification preference")
@@ -73,6 +76,8 @@ func SetNotificationPreference(db *sql.DB, userID int, notificationType, mode st
 	return err
 }
 
+// ShouldNotify says if this notification is allowed by the settings of who gets it
+// no saved row means the default, which is to send it
 func ShouldNotify(db *sql.DB, recipientID, actorID int, notificationType string) (bool, error) {
 	if notificationType == "" {
 		return true, nil
@@ -98,6 +103,7 @@ func ShouldNotify(db *sql.DB, recipientID, actorID int, notificationType string)
 	case "none":
 		return false, nil
 
+	// friends mode only lets it through when we follow each other
 	case "friends":
 		return users.IsFriend(db, recipientID, actorID)
 	}

@@ -5,6 +5,8 @@ import (
 	"social/internal/models"
 )
 
+// InsertNotification saves the message in notifications and what it is about in notifications_types
+// both in one transaction so we never have half a notification
 func InsertNotification(db *sql.DB, n models.NewNotification) (int, error) {
 	tx, err := db.Begin()
 
@@ -87,6 +89,7 @@ func InsertNotification(db *sql.DB, n models.NewNotification) (int, error) {
 	return int(notificationID), nil
 }
 
+// actorExpression picks the user who did the action, same idea as in the handler query
 const actorExpression = `
 	COALESCE(
 		nt.message_user_id,
@@ -107,12 +110,14 @@ const actorExpression = `
 	)
 `
 
+// duplicate is the same notification again within 10 min, burst is already 5 from one person in the last minute
 const (
 	duplicateWindow = "-10 minutes"
 	burstWindow     = "-1 minute"
 	burstLimit      = 5
 )
 
+// IsSpam stops like unlike like unlike from flooding someone
 func IsSpam(db *sql.DB, actorID int, n models.NewNotification) (bool, error) {
 	if actorID <= 0 {
 		return false, nil
@@ -156,6 +161,7 @@ func IsSpam(db *sql.DB, actorID int, n models.NewNotification) (bool, error) {
 		return true, nil
 	}
 
+	// also stop one person sending too many in a short time
 	var burst int
 
 	err = db.QueryRow(`
@@ -175,6 +181,7 @@ func IsSpam(db *sql.DB, actorID int, n models.NewNotification) (bool, error) {
 	return burst >= burstLimit, nil
 }
 
+// chat messages are not counted on the bell
 const excludedTypesClause = `
 	nt.message_user_id IS NULL
 `
@@ -195,6 +202,7 @@ func GetUnreadCount(db *sql.DB, userID int) (int, error) {
 	return count, err
 }
 
+// MarkAllRead and MarkRead only touch rows of this user
 func MarkAllRead(db *sql.DB, userID int) error {
 	_, err := db.Exec(`
 		UPDATE notifications
@@ -218,6 +226,7 @@ func MarkRead(db *sql.DB, userID, notificationID int) error {
 	return err
 }
 
+// HasGroupInvite checks if the user got an invite to this group
 func HasGroupInvite(db *sql.DB, userID, groupID int) (bool, error) {
 	var exists int
 
@@ -243,6 +252,7 @@ func HasGroupInvite(db *sql.DB, userID, groupID int) (bool, error) {
 	return true, nil
 }
 
+// the delete functions remove old invite and request notifications once they are answered
 func DeleteGroupInvites(db *sql.DB, userID, groupID int) error {
 	_, err := db.Exec(`
 		DELETE FROM notifications
